@@ -2,8 +2,8 @@
  * Operating Systems  [2INCO]  Practical Assignment
  * Interprocess Communication
  *
- * STUDENT_NAME_1 (STUDENT_NR_1)
- * STUDENT_NAME_2 (STUDENT_NR_2)
+ * Robert Jong-A-Lock 0726356
+ * Tom Buskens 1378120
  *
  * Grading:
  * Students who hand in clean code that fully satisfies the minimum requirements will get an 8. 
@@ -62,6 +62,8 @@ void checkHash(char string[], int currentLength)
 		result.suicideNote = 0;
 		result.hashIndex = currentJob.hashIndex;
 		strcpy(result.correctString,string);
+
+		found = 1;
 
 		mq_send(queResultDescriptor,(char *) &result, sizeof (result), 0);
 
