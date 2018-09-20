@@ -2,8 +2,8 @@
  * Operating Systems  [2INCO]  Practical Assignment
  * Interprocess Communication
  *
- * STUDENT_NAME_1 (STUDENT_NR_1)
- * STUDENT_NAME_2 (STUDENT_NR_2)
+ * Robert Jong-A-Lock 0726356
+ * Tom Buskens 1378120
  *
  * Grading:
  * Students who hand in clean code that fully satisfies the minimum requirements will get an 8. 
@@ -26,7 +26,7 @@
 #include "settings.h"
 #include "common.h"
 
-#define STUDENT_NAME "RobertEnTom"
+#define STUDENT_NAME "RobertTom"
 
 mqd_t queJobDescriptor; //descriptor from the job queue
 mqd_t queResultDescriptor; //descriptor from the result queue
@@ -298,7 +298,7 @@ void fillQueue()
 		}
 		else
 		{
-			printf("%s\n", hashesResult[i]);
+			printf("'%s'\n", hashesResult[i]);
 		}
 	}
 }
