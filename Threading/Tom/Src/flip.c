@@ -21,12 +21,49 @@
 #include "uint128.h"
 #include "flip.h"
 
+void createMutexes()
+{
+
+}
+
+void closeMutexes()
+{
+
+}
+
+
+void startThread(int numberToCheck)
+{
+	for(int i = numberToCheck; i<NROF_PIECES;i+=NumberToCheck )
+	{
+		toggleBit(i);
+	}
+}
+
+void toggleBit(int index)
+{
+	int bufferIndex = index / 128;
+	int indexInBuffer = index % 128;
+
+	//check which buffer is needed and request its mutex
+}
+
+
 int main (void)
 {
     // TODO: start threads to flip the pieces and output the results
     // (see thread_test() and thread_mutex_test() how to use threads and mutexes,
     //  see bit_test() how to manipulate bits in a large integer)
+	createMutexes();
 
+	for(int i=0;i<NROF_PIECES;i++)
+	{
+		startThread(i);
+	}
+
+	//join threads
+
+	closeMutexes();
 
     return (0);
 }
