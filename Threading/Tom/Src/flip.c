@@ -31,32 +31,73 @@ void closeMutexes()
 
 }
 
-
-void startThread(int numberToCheck)
+void setAllBitsOne()
 {
-	for(int i = numberToCheck; i<NROF_PIECES;i+=NumberToCheck )
+	uint128_t onlyOnes = ~0;
+
+	for(int i=0;i<(NROF_PIECES/128) + 1;i++)
 	{
-		toggleBit(i);
+		buffer[i] = onlyOnes;
 	}
+}
+
+void printBits()
+{
+	//print all numbers that end up true, one number per line
+	for(int i=0;i<NROF_PIECES;i++)
+	{
+		int bufferIndex = i / 128;
+		int indexInBuffer = i % 128;
+
+		if((buffer[bufferIndex] >> indexInBuffer) & (uint128_t) 1)
+		{
+			printf("%d\n",i);
+		}
+	}
+
 }
 
 void toggleBit(int index)
 {
+	//printf("Toggling %d\n",index);
+
 	int bufferIndex = index / 128;
 	int indexInBuffer = index % 128;
 
+	uint128_t bitMask = ((uint128_t) 1) << indexInBuffer;
+
 	//check which buffer is needed and request its mutex
+
+	//printf("Buffer %d: 0x%llx\n",bufferIndex,buffer[bufferIndex]);
+	//printf("Bitmask: 0x%llx\n", bitMask);
+
+	buffer[bufferIndex] ^= bitMask;
+
+	//printf("Result: 0x%llx\n", buffer[bufferIndex]);
+
 }
 
+
+void startThread(int numberToCheck)
+{
+	//printf("Started thread with number %d\n",numberToCheck);
+
+	for(int i = numberToCheck; i<NROF_PIECES;i+=numberToCheck )
+	{
+		toggleBit(i);
+	}
+}
 
 int main (void)
 {
     // TODO: start threads to flip the pieces and output the results
     // (see thread_test() and thread_mutex_test() how to use threads and mutexes,
     //  see bit_test() how to manipulate bits in a large integer)
+	setAllBitsOne();
+
 	createMutexes();
 
-	for(int i=0;i<NROF_PIECES;i++)
+	for(int i=2;i<NROF_PIECES;i++)
 	{
 		startThread(i);
 	}
@@ -64,6 +105,8 @@ int main (void)
 	//join threads
 
 	closeMutexes();
+
+	printBits();
 
     return (0);
 }
