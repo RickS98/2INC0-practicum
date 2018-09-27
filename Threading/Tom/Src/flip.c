@@ -92,14 +92,41 @@ void toggleBit(int index)
 }
 
 
-void startThread(int numberToCheck)
+void *thread(void *arg)
 {
 	//printf("Started thread with number %d\n",numberToCheck);
+
+	int numberToCheck = *(int*)arg;
+	free(arg);
 
 	for(int i = numberToCheck; i<NROF_PIECES;i+=numberToCheck )
 	{
 		toggleBit(i);
 	}
+	return NULL;
+}
+
+void runThreads()
+{
+	pthread_t threadId[NROF_PIECES];
+
+	for(int i=2;i<NROF_PIECES;i++)
+	{
+		int *numberToCheck;
+		numberToCheck = malloc(sizeof (int));
+		*numberToCheck = i;
+
+		pthread_create (&threadId[i], NULL, thread, numberToCheck);
+	}
+
+
+
+	for(int i=2;i<NROF_PIECES;i++)
+	{
+		pthread_join(threadId[i], NULL);
+	}
+
+	//join threads
 }
 
 int main (void)
@@ -111,12 +138,9 @@ int main (void)
 
 	createMutexes();
 
-	for(int i=2;i<NROF_PIECES;i++)
-	{
-		startThread(i);
-	}
 
-	//join threads
+	runThreads();
+
 
 	closeMutexes();
 
