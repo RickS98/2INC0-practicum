@@ -71,30 +71,6 @@ void printBits()
 
 }
 
-void toggleBit(int index)
-{
-	//printf("Toggling %d\n",index);
-
-	int bufferIndex = index / 128;
-	int indexInBuffer = index % 128;
-
-	uint128_t bitMask = ((uint128_t) 1) << indexInBuffer;
-
-	//check which buffer is needed and request its mutex
-
-	pthread_mutex_lock(&mutexLocks[bufferIndex]);
-
-	//printf("Buffer %d: 0x%llx\n",bufferIndex,buffer[bufferIndex]);
-	//printf("Bitmask: 0x%llx\n", bitMask);
-
-	buffer[bufferIndex] ^= bitMask;
-
-	pthread_mutex_unlock(&mutexLocks[bufferIndex]);
-
-	//printf("Result: 0x%llx\n", buffer[bufferIndex]);
-
-}
-
 
 void *thread(void *arg)
 {
@@ -102,10 +78,34 @@ void *thread(void *arg)
 
 	int numberToCheck = *(int*)arg;
 	free(arg);
-	sleep(1);
-	for(int i = numberToCheck; i<NROF_PIECES;i+=numberToCheck )
+
+	uint128_t bitMask = 0;
+
+	for(int i= 0;i<NROF_PIECES;i+=numberToCheck)
 	{
-		toggleBit(i);
+		bitMask = (bitMask | (uint128_t) 1) << numberToCheck;
+	}
+
+	int maskShift = numberToCheck - (128%numberToCheck);
+
+	for(int i = 0;i<NROF_BUFFERS;i++)
+	{
+		//check which buffer is needed and request its mutex
+
+		pthread_mutex_lock(&mutexLocks[i]);
+
+		//printf("Buffer %d: 0x%llx\n",bufferIndex,buffer[bufferIndex]);
+		//printf("Bitmask: 0x%llx\n", bitMask);
+
+		buffer[i] ^= bitMask;
+
+		pthread_mutex_unlock(&mutexLocks[i]);
+
+		bitMask = (bitMask | (uint128_t) 1) << maskShift;
+
+		//printf("Result: 0x%llx\n", buffer[bufferIndex]);
+
+
 	}
 
 	sem_post(&threadCounter);
