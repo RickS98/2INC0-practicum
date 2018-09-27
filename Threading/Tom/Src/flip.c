@@ -21,21 +21,31 @@
 #include "uint128.h"
 #include "flip.h"
 
+#define NROF_BUFFERS (NROF_PIECES/128) + 1
+
+pthread_mutex_t mutexLocks[NROF_BUFFERS];
+
 void createMutexes()
 {
-
+	for(int i=0;i<NROF_BUFFERS;i++)
+	{
+		pthread_mutex_init ( &mutexLocks[i], NULL);
+	}
 }
 
 void closeMutexes()
 {
-
+	for(int i=0;i<NROF_BUFFERS;i++)
+	{
+		pthread_mutex_destroy(&mutexLocks[i]);
+	}
 }
 
 void setAllBitsOne()
 {
 	uint128_t onlyOnes = ~0;
 
-	for(int i=0;i<(NROF_PIECES/128) + 1;i++)
+	for(int i=0;i<NROF_BUFFERS;i++)
 	{
 		buffer[i] = onlyOnes;
 	}
@@ -68,10 +78,14 @@ void toggleBit(int index)
 
 	//check which buffer is needed and request its mutex
 
+	pthread_mutex_lock(&mutexLocks[bufferIndex]);
+
 	//printf("Buffer %d: 0x%llx\n",bufferIndex,buffer[bufferIndex]);
 	//printf("Bitmask: 0x%llx\n", bitMask);
 
 	buffer[bufferIndex] ^= bitMask;
+
+	pthread_mutex_unlock(&mutexLocks[bufferIndex]);
 
 	//printf("Result: 0x%llx\n", buffer[bufferIndex]);
 

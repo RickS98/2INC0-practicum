@@ -1,5 +1,7 @@
 TODO
 dont use the bit on zero and remove it from resuls
+optimize printing by shifting during for loop
+same for shifting normal in toggleBit
 
 
 OLD
