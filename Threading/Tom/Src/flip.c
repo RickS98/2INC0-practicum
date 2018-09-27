@@ -17,6 +17,7 @@
 #include <stdbool.h>
 #include <errno.h>          // for perror()
 #include <pthread.h>
+#include <semaphore.h>
 
 #include "uint128.h"
 #include "flip.h"
@@ -24,21 +25,24 @@
 #define NROF_BUFFERS (NROF_PIECES/128) + 1
 
 pthread_mutex_t mutexLocks[NROF_BUFFERS];
+sem_t threadCounter;
 
-void createMutexes()
+void initialize()
 {
 	for(int i=0;i<NROF_BUFFERS;i++)
 	{
 		pthread_mutex_init ( &mutexLocks[i], NULL);
 	}
+	sem_init(&threadCounter, 0, NROF_THREADS);
 }
 
-void closeMutexes()
+void destroy()
 {
 	for(int i=0;i<NROF_BUFFERS;i++)
 	{
 		pthread_mutex_destroy(&mutexLocks[i]);
 	}
+	sem_destroy(&threadCounter);
 }
 
 void setAllBitsOne()
@@ -98,35 +102,40 @@ void *thread(void *arg)
 
 	int numberToCheck = *(int*)arg;
 	free(arg);
-
+	sleep(1);
 	for(int i = numberToCheck; i<NROF_PIECES;i+=numberToCheck )
 	{
 		toggleBit(i);
 	}
+
+	sem_post(&threadCounter);
+
 	return NULL;
 }
 
 void runThreads()
 {
-	pthread_t threadId[NROF_PIECES];
+
 
 	for(int i=2;i<NROF_PIECES;i++)
 	{
+
+
+		pthread_t threadId;
+
 		int *numberToCheck;
 		numberToCheck = malloc(sizeof (int));
 		*numberToCheck = i;
 
-		pthread_create (&threadId[i], NULL, thread, numberToCheck);
+		sem_wait(&threadCounter);
+
+		pthread_create (&threadId, NULL, thread, numberToCheck);
 	}
 
-
-
-	for(int i=2;i<NROF_PIECES;i++)
+	for(int i = 0; i<NROF_THREADS;i++)
 	{
-		pthread_join(threadId[i], NULL);
+		sem_wait(&threadCounter);
 	}
-
-	//join threads
 }
 
 int main (void)
@@ -136,13 +145,13 @@ int main (void)
     //  see bit_test() how to manipulate bits in a large integer)
 	setAllBitsOne();
 
-	createMutexes();
+	initialize();
 
 
 	runThreads();
 
 
-	closeMutexes();
+	destroy();
 
 	printBits();
 
