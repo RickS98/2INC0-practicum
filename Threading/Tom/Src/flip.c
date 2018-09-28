@@ -58,14 +58,21 @@ void setAllBitsOne()
 void printBits()
 {
 	//print all numbers that end up true, one number per line
-	for(int i=0;i<NROF_PIECES;i++)
-	{
-		int bufferIndex = i / 128;
-		int indexInBuffer = i % 128;
+	int k = 1;
 
-		if((buffer[bufferIndex] >> indexInBuffer) & (uint128_t) 1)
+	for(int i=0;i<NROF_BUFFERS;i++)
+	{
+		uint128_t temp = buffer[i];
+
+		for(int j=0;j<128 && k<NROF_PIECES; j++)
 		{
-			printf("%d\n",i);
+			temp = temp >> 1;
+
+			if(temp & (uint128_t) 1)
+			{
+				printf("%d\n",k);
+			}
+			k++;
 		}
 	}
 
@@ -79,32 +86,32 @@ void *thread(void *arg)
 	int numberToCheck = *(int*)arg;
 	free(arg);
 
-	uint128_t bitMask = 0;
+	uint128_t bitMask[NROF_BUFFERS];
 
-	for(int i= 0;i<NROF_PIECES;i+=numberToCheck)
+	for(int i=numberToCheck;i<NROF_PIECES;i+=numberToCheck)
 	{
-		bitMask = (bitMask | (uint128_t) 1) << numberToCheck;
+		int maskIndex = i / 128;
+		int indexInMask = i % 128;
+
+		bitMask[maskIndex] |= (((uint128_t) 1) << indexInMask);
 	}
 
-	int maskShift = numberToCheck - (128%numberToCheck);
 
 	for(int i = 0;i<NROF_BUFFERS;i++)
 	{
+
 		//check which buffer is needed and request its mutex
 
 		pthread_mutex_lock(&mutexLocks[i]);
 
 		//printf("Buffer %d: 0x%llx\n",bufferIndex,buffer[bufferIndex]);
-		//printf("Bitmask: 0x%llx\n", bitMask);
+		//printf("BufferNumber: %d\nNumber: %d\nBitmask: 0x%016lx%016lx\n",i,numberToCheck,HI(bitMask), LO(bitMask));
 
-		buffer[i] ^= bitMask;
+		buffer[i] ^= bitMask[i];
 
 		pthread_mutex_unlock(&mutexLocks[i]);
 
-		bitMask = (bitMask | (uint128_t) 1) << maskShift;
-
-		//printf("Result: 0x%llx\n", buffer[bufferIndex]);
-
+		//printf("Result: 0x%llx\n", buffer[bufferIndex])
 
 	}
 
@@ -119,8 +126,6 @@ void runThreads()
 
 	for(int i=2;i<NROF_PIECES;i++)
 	{
-
-
 		pthread_t threadId;
 
 		int *numberToCheck;
