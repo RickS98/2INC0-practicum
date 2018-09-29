@@ -22,12 +22,19 @@
 //#include "uint128.h"
 #include "flip.h"
 
-void showbits(uint128_t* v, int w)
+typedef struct {
+    uint32_t    stepsz;
+    uint128_t * buf;
+}toggle_data;
+
+#define SZ(b) (sizeof(b)/sizeof(b[0]))
+
+void showbits(uint128_t v[], int w)
 {
     int l = 0;
-    for(int j = 0; j < BUFSZ; ++j) {
+    for(int j = 0, n=0; j < SZ(buffer); ++j) { // dependency on global sz while using param. this is ugly.
         uint128_t c = v[j];
-        for(int i = (j==0)?1:0; i < 128; ++i){
+        for(int i = (j==0)?1:0; (i < 128) && (n<NROF_PIECES); ++i, ++n){
             uint32_t d = (c>>i) & 0x1;
             printf("%u ", d);
             //c >>= 1;
@@ -36,7 +43,6 @@ void showbits(uint128_t* v, int w)
     }
     printf("\n");
 }
-
 
 void toggle(uint128_t* segment, uint8_t bit)
 {
@@ -47,22 +53,41 @@ void toggle(uint128_t* segment, uint8_t bit)
     *segment |= ~tmp & mask; //put bit back;
 }
 
+void toggle_thread(void *ptr)
+{
+    toggle_data data = *(toggle_data *)ptr; // make local copy
+
+    for(uint32_t m = 0; m <= NROF_PIECES; m+= data.stepsz) { // loop over all with step size of multiples
+        toggle( &(data.buf[m/128]), (m%128) );
+    }
+}
+
 int main (void)
 {
     // TODO: start threads to flip the pieces and output the results
     // (see thread_test() and thread_mutex_test() how to use threads and mutexes,
     //  see bit_test() how to manipulate bits in a large integer)
 
-    memset(buffer, 0xff, sizeof(uint128_t)*(BUFSZ));
+    memset(buffer, 0xff, sizeof(buffer));
 
-	//pthread_t thread_id[NROF_THREADS];
+    //pthread_t thread_id[NROF_THREADS];
+    toggle_data thread_data[NROF_THREADS] = {0};
 
-    for(uint32_t n = 1; n < NROF_PIECES; ++n) { // loop for each value in NROF_PIECES
-        for(uint32_t m = 0; m < NROF_PIECES; m+= n) { // loop for multiples
-            
-			//pthread_create(&thread_id_md5[m], NULL, do_md5, (void *)buf[m]);
+    for(uint32_t n = 1; n <= NROF_PIECES; ++n) { // loop for each value in NROF_PIECES
+        // for(uint32_t m = 0; m < NROF_PIECES; m+= n) { // loop over all with step size of multiples
+            // toggle( &(buffer[m/128]), (m%128) );
+        // }
+
+        for(uint32_t t = 0; t < NROF_THREADS; ++t) {
+            thread_data[t].buf = buffer;
+            thread_data[t].stepsz = n;
+			printf("thread %d\n", t);
 			
-			toggle( &(buffer[m/128]), (m%128) );
+            toggle_thread((void *)&(thread_data[t]));
+
+        //int err = pthread_create(&thread_id[m], NULL, toggle, (void *)buf[m]);
+        //if (err < 0) perror("main");
+
         }
     }
 

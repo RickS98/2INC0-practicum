@@ -21,14 +21,13 @@
  * NROF_THREADS: number of threads that can be run in parallel
  * (value must be between 1 and ... (until you run out of system resources))
  */
-#define NROF_THREADS		10
+#define NROF_THREADS		1
 
 /**
  * buffer[]: datastructure of the pieces; each piece is represented by one bit
  */
  
-#define BUFSZ	((NROF_PIECES/128) + 1)
 
-static uint128_t			buffer[BUFSZ];
+static uint128_t			buffer[((NROF_PIECES/128) + 1)];
 
 #endif
