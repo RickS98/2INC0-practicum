@@ -18,6 +18,7 @@
 #include <errno.h>          // for perror()
 #include <pthread.h>
 #include <string.h>
+#include <unistd.h>         // for getpid()
 
 //#include "uint128.h"
 #include "flip.h"
@@ -28,6 +29,8 @@ typedef struct {
 }toggle_data;
 
 #define SZ(b) (sizeof(b)/sizeof(b[0]))
+
+pthread_mutex_t toggle_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 void showbits(uint128_t v[], int w)
 {
@@ -47,19 +50,26 @@ void showbits(uint128_t v[], int w)
 void toggle(uint128_t* segment, uint8_t bit)
 {
     uint128_t mask = ((uint128_t) 0x1 << bit); // make the mask by setting the appropriate bit to one
-
+	
+	pthread_mutex_lock( &toggle_mutex );//critical section start
+	
     uint128_t tmp = *segment & mask; // get the bit value
     *segment &= ~mask; //clear the bit
     *segment |= ~tmp & mask; //put bit back;
+	
+	pthread_mutex_unlock( &toggle_mutex );//critical section stop
+
 }
 
-void toggle_thread(void *ptr)
+void * toggle_thread(void *ptr)
 {
     toggle_data data = *(toggle_data *)ptr; // make local copy
 
     for(uint32_t m = 0; m <= NROF_PIECES; m+= data.stepsz) { // loop over all with step size of multiples
         toggle( &(data.buf[m/128]), (m%128) );
     }
+	
+	pthread_exit(0);
 }
 
 int main (void)
@@ -70,25 +80,30 @@ int main (void)
 
     memset(buffer, 0xff, sizeof(buffer));
 
-    //pthread_t thread_id[NROF_THREADS];
+    pthread_t thread_id[NROF_THREADS];
     toggle_data thread_data[NROF_THREADS] = {0};
 
-    for(uint32_t n = 1; n <= NROF_PIECES; ++n) { // loop for each value in NROF_PIECES
+    for(uint32_t n = 1,t = 0; n <= NROF_PIECES;) { // loop for each value in NROF_PIECES
         // for(uint32_t m = 0; m < NROF_PIECES; m+= n) { // loop over all with step size of multiples
             // toggle( &(buffer[m/128]), (m%128) );
         // }
 
-        for(uint32_t t = 0; t < NROF_THREADS; ++t) {
+        for(; t < NROF_THREADS; ++t, ++n) {
             thread_data[t].buf = buffer;
             thread_data[t].stepsz = n;
-			printf("thread %d\n", t);
-			
-            toggle_thread((void *)&(thread_data[t]));
+			printf("N: %d\n", n);
 
-        //int err = pthread_create(&thread_id[m], NULL, toggle, (void *)buf[m]);
-        //if (err < 0) perror("main");
+            //toggle_thread((void *)&(thread_data[t]));
+
+        int err = pthread_create(&thread_id[t], NULL, toggle_thread, (void *)&(thread_data[t]));
+        if (err < 0) perror("create");
 
         }
+		//sleep(1);
+		for(--t; t > 0; --t) {
+			int err = pthread_join(thread_id[t], NULL);
+			if (err < 0) perror("join");
+		}
     }
 
     showbits(buffer,10);
