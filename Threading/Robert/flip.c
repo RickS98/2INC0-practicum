@@ -87,7 +87,7 @@ int main (void)
 
     for(uint32_t n = 1,t = 0; n <= NROF_PIECES;) { // loop for each value in NROF_PIECES
 
-        for(; t < NROF_THREADS; ++t, ++n) {
+        for(; (t < NROF_THREADS) && (n <= NROF_PIECES); ++t, ++n) {
             thread_data[t].buf = buffer;
             thread_data[t].stepsz = n;
 
