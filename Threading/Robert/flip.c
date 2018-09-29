@@ -32,16 +32,18 @@ typedef struct {
 
 pthread_mutex_t toggle_mutex = PTHREAD_MUTEX_INITIALIZER;
 
-void showbits(uint128_t v[], int w)
+void showbits(int w)
 {
     int l = 0;
-    for(int j = 0, n=0; j < SZ(buffer); ++j) { // dependency on global sz while using param. this is ugly.
-        uint128_t c = v[j];
-        for(int i = (j==0)?1:0; (i < 128) && (n<NROF_PIECES); ++i, ++n){
+    for(int j = 0, n=0; j < SZ(buffer); ++j) {
+        uint128_t c = buffer[j];
+        for(int i = (j==0)?1:0; (i < 128) && (n<NROF_PIECES); ++i, ++n) {
             uint32_t d = (c>>i) & 0x1;
             printf("%u ", d);
-            //c >>= 1;
-            if (((j*128+i)%w)==0) printf("     %u0\n", l++);
+            if (((j*128+i)%w)==0) {
+                fprintf(stderr, "%u\t\t\t", 1+w*l++);
+                fprintf(stdout, "\n");
+            }
         }
     }
     printf("\n");
@@ -50,14 +52,14 @@ void showbits(uint128_t v[], int w)
 void toggle(uint128_t* segment, uint8_t bit)
 {
     uint128_t mask = ((uint128_t) 0x1 << bit); // make the mask by setting the appropriate bit to one
-	
-	pthread_mutex_lock( &toggle_mutex );//critical section start
-	
+
+    pthread_mutex_lock( &toggle_mutex );//critical section start
+
     uint128_t tmp = *segment & mask; // get the bit value
     *segment &= ~mask; //clear the bit
     *segment |= ~tmp & mask; //put bit back;
-	
-	pthread_mutex_unlock( &toggle_mutex );//critical section stop
+
+    pthread_mutex_unlock( &toggle_mutex );//critical section stop
 
 }
 
@@ -68,8 +70,8 @@ void * toggle_thread(void *ptr)
     for(uint32_t m = 0; m <= NROF_PIECES; m+= data.stepsz) { // loop over all with step size of multiples
         toggle( &(data.buf[m/128]), (m%128) );
     }
-	
-	pthread_exit(0);
+
+    pthread_exit(0);
 }
 
 int main (void)
@@ -84,30 +86,27 @@ int main (void)
     toggle_data thread_data[NROF_THREADS] = {0};
 
     for(uint32_t n = 1,t = 0; n <= NROF_PIECES;) { // loop for each value in NROF_PIECES
-        // for(uint32_t m = 0; m < NROF_PIECES; m+= n) { // loop over all with step size of multiples
-            // toggle( &(buffer[m/128]), (m%128) );
-        // }
 
         for(; t < NROF_THREADS; ++t, ++n) {
             thread_data[t].buf = buffer;
             thread_data[t].stepsz = n;
-			printf("N: %d\n", n);
 
-            //toggle_thread((void *)&(thread_data[t]));
-
-        int err = pthread_create(&thread_id[t], NULL, toggle_thread, (void *)&(thread_data[t]));
-        if (err < 0) perror("create");
-
+            int err = pthread_create(&thread_id[t], NULL, toggle_thread, (void *)&(thread_data[t]));
+            if (err < 0) perror("create");
         }
-		//sleep(1);
-		for(--t; t > 0; --t) {
-			int err = pthread_join(thread_id[t], NULL);
-			if (err < 0) perror("join");
-		}
+
+        for(--t; t > 0; --t) {
+            int err = pthread_join(thread_id[t], NULL);
+            if (err < 0) perror("join");
+        }
+
+        fprintf(stderr,".");
     }
 
-    showbits(buffer,10);
-    printf("done! \n");
+    fprintf(stderr,"\n");
+
+    showbits(1);
+    fprintf(stderr, "done! \n");
     return (0);
 }
 
