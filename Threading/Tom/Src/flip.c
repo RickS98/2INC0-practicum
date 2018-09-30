@@ -27,6 +27,7 @@
 #define THREAD_BUSY 1
 #define THREAD_FINISHED 2
 
+int error;
 
 pthread_mutex_t mutexLocks[NROF_BUFFERS]; //mutex lock to eliminate race conditions
 sem_t threadCounter; //semaphore to lock main thread when max threads is reached
@@ -44,9 +45,20 @@ void initialize()
 {
 	for(int i=0;i<NROF_BUFFERS;i++)
 	{
-		pthread_mutex_init ( &mutexLocks[i], NULL);//initialize all mutexes
+		error = pthread_mutex_init ( &mutexLocks[i], NULL);//initialize all mutexes
+		if(error<0)
+		{
+			perror("Mutex init failed");
+			exit(1);
+		}
 	}
-	sem_init(&threadCounter, 0, NROF_THREADS); //initialize semaphore its initial numbers is the amount of threads that can be used
+	error = sem_init(&threadCounter, 0, NROF_THREADS); //initialize semaphore its initial numbers is the amount of threads that can be used
+	if(error<0)
+	{
+		perror("Semaphore init failed");
+		exit(1);
+	}
+
 }
 
 //This function destroys all mutexes and the semaphore
@@ -54,9 +66,19 @@ void destroy()
 {
 	for(int i=0;i<NROF_BUFFERS;i++)
 	{
-		pthread_mutex_destroy(&mutexLocks[i]);//cleunup mutexes
+		error = pthread_mutex_destroy(&mutexLocks[i]);//cleunup mutexes
+		if(error<0)
+		{
+			perror("Mutex destroy failed");
+			exit(1);
+		}
 	}
-	sem_destroy(&threadCounter);//cleunup semaphore
+	error = sem_destroy(&threadCounter);//cleunup semaphore
+	if(error<0)
+	{
+		perror("Semaphore init failed");
+		exit(1);
+	}
 }
 
 //This funtions sets all bits to one
@@ -74,22 +96,16 @@ void setAllBitsOne()
 void printBits()
 {
 	//print all numbers that end up true, one number per line
-
-	for(int k = 1, i=0;i<NROF_BUFFERS;i++)
+	for(int i=1;i<NROF_PIECES;i++)
 	{
-		uint128_t temp = buffer[i];
+		int bufferIndex = i / 128;
+		int indexInBuffer = i % 128;
 
-		for(int j=0;j<128 && k<=NROF_PIECES; j++,k++)
+		if((buffer[bufferIndex] >> indexInBuffer) & (uint128_t) 1)
 		{
-			temp = temp >> 1;
-
-			if(temp & (uint128_t) 1)
-			{
-				printf("%d\n",k);
-			}
+			printf("%d\n",i);
 		}
 	}
-
 }
 
 //This is the thread that will be run to toggle a certain multiple of bits
@@ -113,8 +129,8 @@ void *thread(void *arg)
 	{
 
 		//check which buffer is needed and request its mutex
-		int returnMutexLock = pthread_mutex_lock(&mutexLocks[i]);
-		if(returnMutexLock<0)
+		error = pthread_mutex_lock(&mutexLocks[i]);
+		if(error<0)
 		{
 			perror("Mutex lock failed");
 			exit(1);
@@ -123,8 +139,8 @@ void *thread(void *arg)
 		buffer[i] ^= bitMask[i]; //toggle bits of mask
 
 		//release mutex so other thread can access it again
-		int returnMutexUnlock = pthread_mutex_unlock(&mutexLocks[i]);
-		if(returnMutexUnlock<0)
+		error = pthread_mutex_unlock(&mutexLocks[i]);
+		if(error<0)
 		{
 			perror("Mutex unlock failed");
 			exit(1);
@@ -136,9 +152,8 @@ void *thread(void *arg)
 
 	free(arg); //clear allocated memory that was made for this thread
 
-	int returnSemPost = sem_post(&threadCounter); //increase semaphore so that main thread can clean up current thread.
-
-	if(returnSemPost<0)
+	error = sem_post(&threadCounter); //increase semaphore so that main thread can clean up current thread.
+	if(error<0)
 	{
 		perror("Semaphore post failed");
 		exit(1);
@@ -159,7 +174,12 @@ void createThread(int currentNumber,int selectedThread)
 
 	threadStatus[selectedThread] = THREAD_BUSY; //sets state of thread to busy so it will be left alone
 
-	pthread_create (&threadId[selectedThread], NULL, thread, newCommand); //create the thread
+	error = pthread_create (&threadId[selectedThread], NULL, thread, newCommand); //create the thread
+	if(error<0)
+	{
+		perror("Creating thread failed");
+		exit(1);
+	}
 }
 
 //function that is responsible for going through all numbers and creating a tag for it
@@ -170,9 +190,8 @@ void runThreads()
 	{
 		//wait for semaphore as a non busy wait for a thread to become finished.
 		//just goes though it when uninitialized threads are left.
-		int returnSemWait = sem_wait(&threadCounter);
-
-		if(returnSemWait<0)
+		error = sem_wait(&threadCounter);
+		if(error<0)
 		{
 			perror("Semaphore post failed");
 			exit(1);
@@ -186,7 +205,12 @@ void runThreads()
 				//if thread is finished it is nessesary to first join it before creating a new one.
 				if(threadStatus[selectedThread]==THREAD_FINISHED)
 				{
-					pthread_join(threadId[selectedThread], NULL);
+					error = pthread_join(threadId[selectedThread], NULL);
+					if(error<0)
+					{
+						perror("Joining thread failed during run");
+						exit(1);
+					}
 				}
 
 				createThread(currentNumber, selectedThread);
@@ -198,7 +222,12 @@ void runThreads()
 	//wait for all thread to finish
 	for(int i = 0; i<NROF_THREADS;i++)
 	{
-		pthread_join(threadId[i], NULL);
+		error = pthread_join(threadId[i], NULL);
+		if(error<0)
+		{
+			perror("Joining thread failed during cleanup");
+			exit(1);
+		}
 	}
 }
 
