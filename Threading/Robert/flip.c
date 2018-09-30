@@ -36,7 +36,7 @@ pthread_mutex_t toggle_mutex = PTHREAD_MUTEX_INITIALIZER;
 void showbits(int w)
 {
     int err = 0;
-    int l = 0; 
+    int l = 0;
     for(int j = 0, n=0; j < SZ(buffer); ++j) {  // for all elements in buffer
         uint128_t c = buffer[j];
         for(int i = (j==0)?1:0; (i < 128) && (n<NROF_PIECES); ++i, ++n) { // go through buf bit by bit, we don't want to print bit0.0 so init to 1 when j==0. if n reaches the NROF_PIECES stop printing.
@@ -49,7 +49,7 @@ void showbits(int w)
                     fprintf(stderr, "--> ");
                     err += d; // if d is correct, thus a zero, this should not increase err
                 } else {
-                    if(d==0) --err; // if d was zero when it shouldn't be, it will decrease err to signify an "off-squares" zero
+                    if(d==0) --err; // if d was zero when it shouldn't be; decrease err to signify an "off-squares" zero
                 }
                 fprintf(stdout, "\n");
             }
@@ -98,26 +98,33 @@ int main (void)
 
     for(int n = 1,t = 0; n <= NROF_PIECES;) { // loop for each value in NROF_PIECES
 
-         for(; (t < NROF_THREADS) && (n <= NROF_PIECES); ++t, ++n) {
+        int c;
+        for(c = 0; (t < NROF_THREADS) && (n <= NROF_PIECES); ++t, ++n, ++c) {
+
             thread_data[t].buf = buffer;
             thread_data[t].stepsz = n;
 
             int err = pthread_create(&thread_id[t], NULL, toggle_thread, (void *)&(thread_data[t]));
             if (err < 0) perror("create");
-         }
-
-         for(int tmax = t; t > 0; --t) {
+        }
+        fprintf(stderr,"created threads: %d\n", c);
+         /* t now contains the number of threads that have been started by the previous loop.
+            This is the number of threads we need to join again afterwards. Start with the oldest one
+            since this is the one with the highest likelihood of being done.
+         */
+        for(int tmax = t, c = 0; t > 0; --t, ++c) {
             int err = pthread_join(thread_id[tmax-t], NULL);
             if (err < 0) perror("join");
-         }
+        }
+        fprintf(stderr,"joined threads: %d\n", c);
 
-        fprintf(stderr,".");
+        //fprintf(stderr,"."); // print a little progress indicator
     }
 
     fprintf(stderr,"\n");
 
     showbits(1);
-    fprintf(stderr, "done! \n");
+    fprintf(stderr, "done! \n"); //since I'm allowed to print anything I want to stderr :-)
     return (0);
 }
 
