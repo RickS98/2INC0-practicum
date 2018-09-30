@@ -25,6 +25,7 @@
 #include "flip.h"
 
 typedef struct {
+    pthread_t thread_id;
     uint32_t    stepsz;
     uint128_t * buf;
 }toggle_data;
@@ -93,33 +94,37 @@ int main (void)
 
     memset(buffer, 0xff, sizeof(buffer));
 
-    pthread_t thread_id[NROF_THREADS];
-    toggle_data thread_data[NROF_THREADS] = {0};
+    toggle_data* thread_data = calloc(NROF_THREADS,sizeof(toggle_data));
 
-    for(int n = 1,t = 0; n <= NROF_PIECES;) { // loop for each value in NROF_PIECES
-
-        int c;
-        for(c = 0; (t < NROF_THREADS) && (n <= NROF_PIECES); ++t, ++n, ++c) {
+    for(int n = 1,t = 0, err =0; (n <= NROF_PIECES) && !(err < 0);) { // loop for each value in NROF_PIECES
+		
+		int c;
+        for(c=0; (t < NROF_THREADS) && (n <= NROF_PIECES); ++t, ++n, ++c) {
 
             thread_data[t].buf = buffer;
             thread_data[t].stepsz = n;
 
-            int err = pthread_create(&thread_id[t], NULL, toggle_thread, (void *)&(thread_data[t]));
+            int err = pthread_create(&thread_data[t].thread_id, NULL, toggle_thread, (void *)&(thread_data[t]));
             if (err < 0) perror("create");
         }
-        fprintf(stderr,"created threads: %d\n", c);
-         /* t now contains the number of threads that have been started by the previous loop.
+		
+		fprintf(stderr,"create: %d", c);
+        
+		/* t now contains the number of threads that have been started by the previous loop.
             This is the number of threads we need to join again afterwards. Start with the oldest one
             since this is the one with the highest likelihood of being done.
          */
-        for(int tmax = t, c = 0; t > 0; --t, ++c) {
-            int err = pthread_join(thread_id[tmax-t], NULL);
+        for(int tmax = t, err = 0, c=0; (t > 0) && !(err < 0); --t, ++c) {
+            int err = pthread_join(thread_data[tmax-t].thread_id, NULL);
             if (err < 0) perror("join");
         }
-        fprintf(stderr,"joined threads: %d\n", c);
 
-        //fprintf(stderr,"."); // print a little progress indicator
+		fprintf(stderr,"\t\tjoin: %d \n", c);
+				
+        fprintf(stderr,"."); // print a little progress indicator
     }
+
+    free(thread_data);
 
     fprintf(stderr,"\n");
 
