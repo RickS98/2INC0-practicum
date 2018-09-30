@@ -52,7 +52,10 @@ void initialize()
 			exit(1);
 		}
 	}
-	error = sem_init(&threadCounter, 0, NROF_THREADS); //initialize semaphore its initial numbers is the amount of threads that can be used
+	error = sem_init(&threadCounter, 0, 1);
+	/*initialize the semaphore with its initial number set to one,
+	*because status of all threads is initially unitialized all threads will be started
+	*/
 	if(error<0)
 	{
 		perror("Semaphore init failed");
