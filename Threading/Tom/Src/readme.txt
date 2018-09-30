@@ -6,6 +6,7 @@ make mask with multiple holes
 go through buffer in different directions
 solve deadlock
 check errors
+include last piece
 
 
 OLD

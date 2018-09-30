@@ -28,11 +28,11 @@
 #define THREAD_FINISHED 2
 
 
-pthread_mutex_t mutexLocks[NROF_BUFFERS];
-sem_t threadCounter;
+pthread_mutex_t mutexLocks[NROF_BUFFERS]; //mutex lock to eliminate race conditions
+sem_t threadCounter; //semaphore to lock main thread when max threads is reached
 
-int threadStatus[NROF_THREADS] = {THREAD_UNINITIALIZED};
-pthread_t threadId[NROF_THREADS];
+int threadStatus[NROF_THREADS] = {THREAD_UNINITIALIZED}; //array that keeps track of status of threads
+pthread_t threadId[NROF_THREADS]; //allocation of threads
 
 struct THREADCOMMAND{
 	int numberToCheck;
@@ -43,18 +43,18 @@ void initialize()
 {
 	for(int i=0;i<NROF_BUFFERS;i++)
 	{
-		pthread_mutex_init ( &mutexLocks[i], NULL);
+		pthread_mutex_init ( &mutexLocks[i], NULL);//initialize all mutexes
 	}
-	sem_init(&threadCounter, 0, NROF_THREADS);
+	sem_init(&threadCounter, 0, NROF_THREADS); //initialize semaphore
 }
 
 void destroy()
 {
 	for(int i=0;i<NROF_BUFFERS;i++)
 	{
-		pthread_mutex_destroy(&mutexLocks[i]);
+		pthread_mutex_destroy(&mutexLocks[i]);//cleunup mutexes
 	}
-	sem_destroy(&threadCounter);
+	sem_destroy(&threadCounter);//cleunup semaphore
 }
 
 void setAllBitsOne()
@@ -63,31 +63,26 @@ void setAllBitsOne()
 
 	for(int i=0;i<NROF_BUFFERS;i++)
 	{
-		buffer[i] = onlyOnes;
+		buffer[i] = onlyOnes;//sets all bits to one in the entire buffer
 	}
 }
 
 void printBits()
 {
 	//print all numbers that end up true, one number per line
-	int k = 1;
 
-	for(int i=0;i<NROF_BUFFERS;i++)
+	for(int k = 1, i=0;i<NROF_BUFFERS;i++)
 	{
 		uint128_t temp = buffer[i];
 
-		for(int j=0;j<128 && k<=NROF_PIECES; j++)
+		for(int j=0;j<128 && k<NROF_PIECES; j++,k++)
 		{
 			temp = temp >> 1;
-
 
 			if(temp & (uint128_t) 1)
 			{
 				printf("%d\n",k);
 			}
-
-			k++;
-
 		}
 	}
 
@@ -101,7 +96,7 @@ void *thread(void *arg)
 	struct THREADCOMMAND command = *(struct THREADCOMMAND*)arg;
 	free(arg);
 
-	uint128_t bitMask[NROF_BUFFERS];
+	uint128_t bitMask[NROF_BUFFERS] = {(uint128_t)0};
 
 	for(int i=command.numberToCheck;i<NROF_PIECES;i+=command.numberToCheck)
 	{
@@ -121,6 +116,7 @@ void *thread(void *arg)
 		if(returnMutexLock<0)
 		{
 			perror("Mutex lock failed");
+			exit(1);
 		}
 
 		//printf("Buffer %d: 0x%llx\n",i,buffer[i]);
@@ -132,6 +128,7 @@ void *thread(void *arg)
 		if(returnMutexUnlock<0)
 		{
 			perror("Mutex unlock failed");
+			exit(1);
 		}
 
 		//printf("Result: 0x%llx\n", buffer[bufferIndex])
