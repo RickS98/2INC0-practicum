@@ -70,21 +70,23 @@ void setAllBitsOne()
 void printBits()
 {
 	//print all numbers that end up true, one number per line
-	int k = 0;
+	int k = 1;
 
 	for(int i=0;i<NROF_BUFFERS;i++)
 	{
 		uint128_t temp = buffer[i];
 
-		for(int j=0;j<128 && k<NROF_PIECES; j++)
+		for(int j=0;j<128 && k<=NROF_PIECES; j++)
 		{
 			temp = temp >> 1;
-			k++;
+
 
 			if(temp & (uint128_t) 1)
 			{
 				printf("%d\n",k);
 			}
+
+			k++;
 
 		}
 	}
@@ -138,11 +140,12 @@ void *thread(void *arg)
 
 	threadStatus[command.threadNumber] = THREAD_FINISHED;
 
-	int returncondSignal = sem_post(&threadCounter);
+	int returnSemPost = sem_post(&threadCounter);
 
-	if(returncondSignal<0)
+	if(returnSemPost<0)
 	{
-		perror("Condition signal  failed");
+		perror("Semaphore post failed");
+		exit(1);
 	}
 
 	pthread_exit(NULL);
@@ -167,7 +170,13 @@ void runThreads()
 {
 	for(int currentNumber = 2;currentNumber<=NROF_PIECES;)
 	{
-		sem_wait(&threadCounter);
+		int returnSemWait = sem_wait(&threadCounter);
+
+		if(returnSemWait<0)
+		{
+			perror("Semaphore post failed");
+			exit(1);
+		}
 
 		for(int selectedThread = 0 ;selectedThread<NROF_THREADS&&currentNumber<=NROF_PIECES;selectedThread++)
 		{
@@ -201,13 +210,11 @@ int main (void)
 
 	initialize();
 
-
 	runThreads();
-
 
 	destroy();
 
-	//printBits();
+	printBits();
 
     return (0);
 }
