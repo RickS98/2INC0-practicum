@@ -35,8 +35,9 @@ pthread_mutex_t toggle_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 void showbits(int w)
 {
+    int err = 0;
     int l = 0;
-    for(int j = 0, n=0; j < SZ(buffer); ++j) {	// for all elements in buffer
+    for(int j = 0, n=0; j < SZ(buffer); ++j) {  // for all elements in buffer
         uint128_t c = buffer[j];
         for(int i = (j==0)?1:0; (i < 128) && (n<NROF_PIECES); ++i, ++n) { // go through buf bit by bit, we don't want to print bit0.0 so init to 1 when j==0. if n reaches the NROF_PIECES stop printing.
             uint32_t d = (c>>i) & 0x1; // get the i-th bit, implicit cast to uint32. we don't care, only interested in lsb.
@@ -44,12 +45,18 @@ void showbits(int w)
             if (((j*128+i)%w)==0) { // stdout: print <newline>. stderr: print line number and --> when there's supposed to be a zero.
                 fprintf(stderr, "%u\t\t\t", 1+w*l++);
                 double dummy;
-                if(modf(sqrt(w*l),&dummy)==0)fprintf(stderr, "--> ");
+                if(modf(sqrt(w*l),&dummy)==0) {
+                    fprintf(stderr, "--> ");
+                    err += d; // if d is correct, thus a zero, this should not increase err
+                } else {
+                    if(d==0) --err; // if d was zero when it shouldn't be, it will decrease err to signify an "off-squares" error
+                }
                 fprintf(stdout, "\n");
             }
         }
     }
-    printf("\n");
+    fprintf(stderr,"#of incorrect zeros: %d ",err);
+    fprintf(stdout, "\n");
 }
 
 void toggle(uint128_t* segment, uint8_t bit)
