@@ -36,7 +36,7 @@ pthread_mutex_t toggle_mutex = PTHREAD_MUTEX_INITIALIZER;
 void showbits(int w)
 {
     int err = 0;
-    int l = 0;
+    int l = 0; 
     for(int j = 0, n=0; j < SZ(buffer); ++j) {  // for all elements in buffer
         uint128_t c = buffer[j];
         for(int i = (j==0)?1:0; (i < 128) && (n<NROF_PIECES); ++i, ++n) { // go through buf bit by bit, we don't want to print bit0.0 so init to 1 when j==0. if n reaches the NROF_PIECES stop printing.
@@ -49,7 +49,7 @@ void showbits(int w)
                     fprintf(stderr, "--> ");
                     err += d; // if d is correct, thus a zero, this should not increase err
                 } else {
-                    if(d==0) --err; // if d was zero when it shouldn't be, it will decrease err to signify an "off-squares" error
+                    if(d==0) --err; // if d was zero when it shouldn't be, it will decrease err to signify an "off-squares" zero
                 }
                 fprintf(stdout, "\n");
             }
@@ -81,7 +81,7 @@ void * toggle_thread(void *ptr)
     for(uint32_t m = 0; m <= NROF_PIECES; m+= data.stepsz) { // loop over all with step size of multiples
         toggle( &(data.buf[m/128]), (m%128) );
     }
-    //return 0;
+
     pthread_exit(0);
 }
 
@@ -102,14 +102,12 @@ int main (void)
             thread_data[t].buf = buffer;
             thread_data[t].stepsz = n;
 
-            //toggle_thread((void *)&(thread_data[t]));
-
             int err = pthread_create(&thread_id[t], NULL, toggle_thread, (void *)&(thread_data[t]));
             if (err < 0) perror("create");
          }
 
-         for(; t > 0; --t) {
-            int err = pthread_join(thread_id[NROF_THREADS-t], NULL);
+         for(int tmax = t; t > 0; --t) {
+            int err = pthread_join(thread_id[tmax-t], NULL);
             if (err < 0) perror("join");
          }
 
