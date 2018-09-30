@@ -97,9 +97,8 @@ int main (void)
     toggle_data* thread_data = calloc(NROF_THREADS,sizeof(toggle_data));
 
     for(int n = 1,t = 0, err =0; (n <= NROF_PIECES) && !(err < 0);) { // loop for each value in NROF_PIECES
-		
-		int c;
-        for(c=0; (t < NROF_THREADS) && (n <= NROF_PIECES); ++t, ++n, ++c) {
+
+        for(; (t < NROF_THREADS) && (n <= NROF_PIECES); ++t, ++n) {
 
             thread_data[t].buf = buffer;
             thread_data[t].stepsz = n;
@@ -107,20 +106,16 @@ int main (void)
             int err = pthread_create(&thread_data[t].thread_id, NULL, toggle_thread, (void *)&(thread_data[t]));
             if (err < 0) perror("create");
         }
-		
-		fprintf(stderr,"create: %d", c);
-        
-		/* t now contains the number of threads that have been started by the previous loop.
+
+        /* t now contains the number of threads that have been started by the previous loop.
             This is the number of threads we need to join again afterwards. Start with the oldest one
             since this is the one with the highest likelihood of being done.
          */
-        for(int tmax = t, err = 0, c=0; (t > 0) && !(err < 0); --t, ++c) {
+        for(int tmax = t, err = 0; (t > 0) && !(err < 0); --t) {
             int err = pthread_join(thread_data[tmax-t].thread_id, NULL);
             if (err < 0) perror("join");
         }
 
-		fprintf(stderr,"\t\tjoin: %d \n", c);
-				
         fprintf(stderr,"."); // print a little progress indicator
     }
 
