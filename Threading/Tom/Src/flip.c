@@ -23,9 +23,21 @@
 #include "flip.h"
 
 #define NROF_BUFFERS (NROF_PIECES/128) + 1
+#define THREAD_UNINITIALIZED 0
+#define THREAD_BUSY 1
+#define THREAD_FINISHED 2
+
 
 pthread_mutex_t mutexLocks[NROF_BUFFERS];
 sem_t threadCounter;
+
+int threadStatus[NROF_THREADS] = {THREAD_UNINITIALIZED};
+pthread_t threadId[NROF_THREADS];
+
+struct THREADCOMMAND{
+	int numberToCheck;
+	int threadNumber;
+};
 
 void initialize()
 {
@@ -58,7 +70,7 @@ void setAllBitsOne()
 void printBits()
 {
 	//print all numbers that end up true, one number per line
-	int k = 1;
+	int k = 0;
 
 	for(int i=0;i<NROF_BUFFERS;i++)
 	{
@@ -67,12 +79,13 @@ void printBits()
 		for(int j=0;j<128 && k<NROF_PIECES; j++)
 		{
 			temp = temp >> 1;
+			k++;
 
 			if(temp & (uint128_t) 1)
 			{
 				printf("%d\n",k);
 			}
-			k++;
+
 		}
 	}
 
@@ -83,12 +96,12 @@ void *thread(void *arg)
 {
 	//printf("Started thread with number %d\n",numberToCheck);
 
-	int numberToCheck = *(int*)arg;
+	struct THREADCOMMAND command = *(struct THREADCOMMAND*)arg;
 	free(arg);
 
 	uint128_t bitMask[NROF_BUFFERS];
 
-	for(int i=numberToCheck;i<NROF_PIECES;i+=numberToCheck)
+	for(int i=command.numberToCheck;i<NROF_PIECES;i+=command.numberToCheck)
 	{
 		int maskIndex = i / 128;
 		int indexInMask = i % 128;
@@ -102,44 +115,80 @@ void *thread(void *arg)
 
 		//check which buffer is needed and request its mutex
 
-		pthread_mutex_lock(&mutexLocks[i]);
+		int returnMutexLock = pthread_mutex_lock(&mutexLocks[i]);
+		if(returnMutexLock<0)
+		{
+			perror("Mutex lock failed");
+		}
 
-		//printf("Buffer %d: 0x%llx\n",bufferIndex,buffer[bufferIndex]);
+		//printf("Buffer %d: 0x%llx\n",i,buffer[i]);
 		//printf("BufferNumber: %d\nNumber: %d\nBitmask: 0x%016lx%016lx\n",i,numberToCheck,HI(bitMask), LO(bitMask));
 
 		buffer[i] ^= bitMask[i];
 
-		pthread_mutex_unlock(&mutexLocks[i]);
+		int returnMutexUnlock = pthread_mutex_unlock(&mutexLocks[i]);
+		if(returnMutexUnlock<0)
+		{
+			perror("Mutex unlock failed");
+		}
 
 		//printf("Result: 0x%llx\n", buffer[bufferIndex])
 
 	}
 
-	sem_post(&threadCounter);
+	threadStatus[command.threadNumber] = THREAD_FINISHED;
 
-	return NULL;
+	int returncondSignal = sem_post(&threadCounter);
+
+	if(returncondSignal<0)
+	{
+		perror("Condition signal  failed");
+	}
+
+	pthread_exit(NULL);
+
+	//return NULL;
 }
+
+void createThread(int currentNumber,int selectedThread)
+{
+	struct THREADCOMMAND *newCommand;
+	newCommand = malloc(sizeof (struct THREADCOMMAND));
+	newCommand->numberToCheck = currentNumber;
+	newCommand->threadNumber=selectedThread;
+
+	threadStatus[selectedThread] = THREAD_BUSY;
+
+	pthread_create (&threadId[selectedThread], NULL, thread, newCommand);
+}
+
 
 void runThreads()
 {
-
-
-	for(int i=2;i<NROF_PIECES;i++)
+	for(int currentNumber = 2;currentNumber<=NROF_PIECES;)
 	{
-		pthread_t threadId;
-
-		int *numberToCheck;
-		numberToCheck = malloc(sizeof (int));
-		*numberToCheck = i;
-
 		sem_wait(&threadCounter);
 
-		pthread_create (&threadId, NULL, thread, numberToCheck);
+		for(int selectedThread = 0 ;selectedThread<NROF_THREADS&&currentNumber<=NROF_PIECES;selectedThread++)
+		{
+			if(threadStatus[selectedThread]!=THREAD_BUSY)
+			{
+
+				if(threadStatus[selectedThread]==THREAD_FINISHED)
+				{
+					pthread_join(threadId[selectedThread], NULL);
+				}
+
+				createThread(currentNumber, selectedThread);
+
+				currentNumber++;
+			}
+		}
 	}
 
 	for(int i = 0; i<NROF_THREADS;i++)
 	{
-		sem_wait(&threadCounter);
+		pthread_join(threadId[i], NULL);
 	}
 }
 
@@ -158,7 +207,7 @@ int main (void)
 
 	destroy();
 
-	printBits();
+	//printBits();
 
     return (0);
 }

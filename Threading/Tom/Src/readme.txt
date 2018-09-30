@@ -4,6 +4,8 @@ optimize printing by shifting during for loop
 same for shifting normal in toggleBit
 make mask with multiple holes
 go through buffer in different directions
+solve deadlock
+check errors
 
 
 OLD
