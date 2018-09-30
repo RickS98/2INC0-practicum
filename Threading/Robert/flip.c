@@ -36,12 +36,12 @@ pthread_mutex_t toggle_mutex = PTHREAD_MUTEX_INITIALIZER;
 void showbits(int w)
 {
     int l = 0;
-    for(int j = 0, n=0; j < SZ(buffer); ++j) {
+    for(int j = 0, n=0; j < SZ(buffer); ++j) {	// for all elements in buffer
         uint128_t c = buffer[j];
-        for(int i = (j==0)?1:0; (i < 128) && (n<NROF_PIECES); ++i, ++n) {
-            uint32_t d = (c>>i) & 0x1;
-            printf("%u ", d);
-            if (((j*128+i)%w)==0) {
+        for(int i = (j==0)?1:0; (i < 128) && (n<NROF_PIECES); ++i, ++n) { // go through buf bit by bit, we don't want to print bit0.0 so init to 1 when j==0. if n reaches the NROF_PIECES stop printing.
+            uint32_t d = (c>>i) & 0x1; // get the i-th bit, implicit cast to uint32. we don't care, only interested in lsb.
+            fprintf(stdout, "%u ", d); // print 1 or 0 to stdout.
+            if (((j*128+i)%w)==0) { // stdout: print <newline>. stderr: print line number and --> when there's supposed to be a zero.
                 fprintf(stderr, "%u\t\t\t", 1+w*l++);
                 double dummy;
                 if(modf(sqrt(w*l),&dummy)==0)fprintf(stderr, "--> ");
@@ -56,15 +56,15 @@ void toggle(uint128_t* segment, uint8_t bit)
 {
     uint128_t mask = ((uint128_t) 0x1 << bit); // make the mask by setting the appropriate bit to one
 
-   // int err = pthread_mutex_lock( &toggle_mutex );//critical section start
-   // if (err < 0) perror("mx_lock");
+   int err = pthread_mutex_lock( &toggle_mutex );//critical section start
+   if (err < 0) perror("mx_lock");
 
     uint128_t tmp = *segment & mask; // get the bit value
     *segment &= ~mask; //clear the bit
     *segment |= ~tmp & mask; //put bit back;
 
-   // err = pthread_mutex_unlock( &toggle_mutex );//critical section stop
-   // if (err < 0) perror("mx_unlock");
+   err = pthread_mutex_unlock( &toggle_mutex );//critical section stop
+   if (err < 0) perror("mx_unlock");
 }
 
 void * toggle_thread(void *ptr)
@@ -74,8 +74,8 @@ void * toggle_thread(void *ptr)
     for(uint32_t m = 0; m <= NROF_PIECES; m+= data.stepsz) { // loop over all with step size of multiples
         toggle( &(data.buf[m/128]), (m%128) );
     }
-return 0;
-//    pthread_exit(0);
+    //return 0;
+    pthread_exit(0);
 }
 
 int main (void)
@@ -94,17 +94,16 @@ int main (void)
          for(; (t < NROF_THREADS) && (n <= NROF_PIECES); ++t, ++n) {
             thread_data[t].buf = buffer;
             thread_data[t].stepsz = n;
-			
-			toggle_thread((void *)&(thread_data[t]));
 
-            // int err = pthread_create(&thread_id[t], NULL, toggle_thread, (void *)&(thread_data[t]));
-            // if (err < 0) perror("create");
+            //toggle_thread((void *)&(thread_data[t]));
+
+            int err = pthread_create(&thread_id[t], NULL, toggle_thread, (void *)&(thread_data[t]));
+            if (err < 0) perror("create");
          }
 
-         //for(--t; t >= 0; --t) {
          for(; t > 0; --t) {
-            // int err = pthread_join(thread_id[t], NULL);
-            // if (err < 0) perror("join");
+            int err = pthread_join(thread_id[NROF_THREADS-t], NULL);
+            if (err < 0) perror("join");
          }
 
         fprintf(stderr,".");
