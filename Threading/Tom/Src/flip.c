@@ -18,14 +18,19 @@
 #include <errno.h>          // for perror()
 #include <pthread.h>
 #include <semaphore.h>
+#include <string.h>
 
 #include "uint128.h"
 #include "flip.h"
 
-#define NROF_BUFFERS (NROF_PIECES/128) + 1
-#define THREAD_UNINITIALIZED 0
-#define THREAD_BUSY 1
-#define THREAD_FINISHED 2
+#define NROF_BITS (sizeof(uint128_t)*8)
+#define NROF_BUFFERS (sizeof(buffer)/sizeof(buffer[0]))
+
+enum{
+	THREAD_UNINITIALIZED = 0, //force to zero ensure thread status array is initiated with all zeros
+	THREAD_BUSY,
+	THREAD_FINISHED
+};
 
 int error;
 
@@ -35,10 +40,10 @@ sem_t threadCounter; //semaphore to lock main thread when max threads is reached
 int threadStatus[NROF_THREADS] = {THREAD_UNINITIALIZED}; //array that keeps track of status of threads
 pthread_t threadId[NROF_THREADS]; //allocation of threads
 
-struct THREADCOMMAND{
+typedef struct{
 	int numberToCheck;//this is neccesary to know which bits to toggle
 	int threadNumber; //this is neccesary to update the status of the thread when finished
-};
+}threadCommand;
 
 //This function initializes all mutexes and the semaphore
 void initialize()
@@ -87,12 +92,7 @@ void destroy()
 //This funtions sets all bits to one
 void setAllBitsOne()
 {
-	uint128_t onlyOnes = ~0;
-
-	for(int i=0;i<NROF_BUFFERS;i++)
-	{
-		buffer[i] = onlyOnes;//sets all bits to one in the entire buffer
-	}
+	memset(buffer, 0xff, sizeof(buffer));
 }
 
 //This function prints the location of all found values
@@ -101,8 +101,8 @@ void printBits()
 	//print all numbers that end up true, one number per line
 	for(int i=1;i<NROF_PIECES;i++)
 	{
-		int bufferIndex = i / 128;
-		int indexInBuffer = i % 128;
+		int bufferIndex = i / NROF_BITS;
+		int indexInBuffer = i % NROF_BITS;
 
 		if((buffer[bufferIndex] >> indexInBuffer) & (uint128_t) 1)
 		{
@@ -114,15 +114,15 @@ void printBits()
 //This is the thread that will be run to toggle a certain multiple of bits
 void *thread(void *arg)
 {
-	struct THREADCOMMAND *command = (struct THREADCOMMAND*)arg; //cast arg to correct struct
+	threadCommand *command = (threadCommand*)arg; //cast arg to correct struct
 
 	uint128_t bitMask[NROF_BUFFERS] = {(uint128_t) 0}; //create array and sets all values to 0 to use for the masks later
 
 	//goes to all values and updates the masks untill the masks contains each value that have to be toggled
 	for(int i=command->numberToCheck;i<=NROF_PIECES;i+=command->numberToCheck)
 	{
-		int maskIndex = i / 128;
-		int indexInMask = i % 128;
+		int maskIndex = i / NROF_BITS;
+		int indexInMask = i % NROF_BITS;
 
 		bitMask[maskIndex] |= (((uint128_t) 1) << indexInMask);
 	}
@@ -130,23 +130,25 @@ void *thread(void *arg)
 	//Now loop through the buffers to apply the masks
 	for(int i = 0;i<NROF_BUFFERS;i++)
 	{
-
-		//check which buffer is needed and request its mutex
-		error = pthread_mutex_lock(&mutexLocks[i]);
-		if(error<0)
+		if(bitMask[i]!=0)//check if buffer is empty to prevent unnessary mutex locks
 		{
-			perror("Mutex lock failed");
-			exit(1);
-		}
+			//check which buffer is needed and request its mutex
+			error = pthread_mutex_lock(&mutexLocks[i]);
+			if(error<0)
+			{
+				perror("Mutex lock failed");
+				exit(1);
+			}
 
-		buffer[i] ^= bitMask[i]; //toggle bits of mask
+			buffer[i] ^= bitMask[i]; //toggle bits of mask
 
-		//release mutex so other thread can access it again
-		error = pthread_mutex_unlock(&mutexLocks[i]);
-		if(error<0)
-		{
-			perror("Mutex unlock failed");
-			exit(1);
+			//release mutex so other thread can access it again
+			error = pthread_mutex_unlock(&mutexLocks[i]);
+			if(error<0)
+			{
+				perror("Mutex unlock failed");
+				exit(1);
+			}
 		}
 
 	}
@@ -170,8 +172,7 @@ void *thread(void *arg)
 //function that is responsible for allocating memory of thread and starting it
 void createThread(int currentNumber,int selectedThread)
 {
-	struct THREADCOMMAND *newCommand; //create pointer to struct
-	newCommand = malloc(sizeof (struct THREADCOMMAND)); //allocate its memory
+	threadCommand *newCommand = malloc(sizeof (threadCommand)); //allocate its memory
 	newCommand->numberToCheck = currentNumber; //and fill it with the needed values
 	newCommand->threadNumber=selectedThread;
 
@@ -200,7 +201,7 @@ void runThreads()
 			exit(1);
 		}
 		//Goes through all threads to see which one can be used for current number
-		for(int selectedThread = 0 ;selectedThread<NROF_THREADS&&currentNumber<=NROF_PIECES;selectedThread++)
+		for(int selectedThread = 0 ;(selectedThread<NROF_THREADS)&&(currentNumber<=NROF_PIECES);selectedThread++)
 		{
 			//if thread is not busy it can be used
 			if(threadStatus[selectedThread]!=THREAD_BUSY)
