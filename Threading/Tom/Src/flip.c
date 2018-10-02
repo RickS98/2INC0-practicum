@@ -25,6 +25,7 @@
 
 #define NROF_BITS (sizeof(uint128_t)*8)
 #define NROF_BUFFERS (sizeof(buffer)/sizeof(buffer[0]))
+#define DISTANCE_BETWEEN_START NROF_PIECES/NROF_THREADS
 
 enum{
 	THREAD_UNINITIALIZED = 0, //force to zero ensure thread status array is initiated with all zeros
@@ -126,10 +127,14 @@ void *thread(void *arg)
 
 		bitMask[maskIndex] |= (((uint128_t) 1) << indexInMask);
 	}
+	//every thread gets its own start position to reduce amount of waiters per lock
+	int startValue = DISTANCE_BETWEEN_START*command->threadNumber;
 
 	//Now loop through the buffers to apply the masks
-	for(int i = 0;i<NROF_BUFFERS;i++)
+	for(int j = startValue;j<NROF_BUFFERS+startValue;j++)
 	{
+		int i = j%NROF_BUFFERS;
+
 		if(bitMask[i]!=0)//check if buffer is empty to prevent unnessary mutex locks
 		{
 			//check which buffer is needed and request its mutex
