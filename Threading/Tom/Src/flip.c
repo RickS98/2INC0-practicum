@@ -29,11 +29,11 @@
 
 enum{
 	THREAD_UNINITIALIZED = 0, //force to zero ensure thread status array is initiated with all zeros
-	THREAD_BUSY,
-	THREAD_FINISHED
+	THREAD_BUSY = 1,
+	THREAD_FINISHED = 2
 };
 
-int error;
+int error = 0;
 
 pthread_mutex_t mutexLocks[NROF_BUFFERS]; //mutex lock to eliminate race conditions
 sem_t threadCounter; //semaphore to lock main thread when max threads is reached
@@ -135,7 +135,7 @@ void *thread(void *arg)
 	{
 		int i = j%NROF_BUFFERS;
 
-		if(bitMask[i]!=0)//check if buffer is empty to prevent unnessary mutex locks
+		if(bitMask[i]!= (uint128_t ) 0)//check if buffer is empty to prevent unnessary mutex locks
 		{
 			//check which buffer is needed and request its mutex
 			error = pthread_mutex_lock(&mutexLocks[i]);
@@ -181,8 +181,6 @@ void createThread(int currentNumber,int selectedThread)
 	newCommand->numberToCheck = currentNumber; //and fill it with the needed values
 	newCommand->threadNumber=selectedThread;
 
-	threadStatus[selectedThread] = THREAD_BUSY; //sets state of thread to busy so it will be left alone
-
 	error = pthread_create (&threadId[selectedThread], NULL, thread, newCommand); //create the thread
 	if(error<0)
 	{
@@ -197,6 +195,7 @@ void runThreads()
 	//loop that goes through all numbers that have to be done
 	for(int currentNumber = 2;currentNumber<=NROF_PIECES;)
 	{
+		//printf("wait: %d\n",currentNumber);
 		//wait for semaphore as a non busy wait for a thread to become finished.
 		//just goes though it when uninitialized threads are left.
 		error = sem_wait(&threadCounter);
@@ -220,7 +219,11 @@ void runThreads()
 						perror("Joining thread failed during run");
 						exit(1);
 					}
+					//printf("done: %d\n",selectedThread);
 				}
+				//printf("start: %d\n",selectedThread);
+
+				threadStatus[selectedThread] = THREAD_BUSY; //sets state of thread to busy so it will be left alone
 
 				createThread(currentNumber, selectedThread);
 				//increate currentNumber so next cycle the next number will be inserted in a thread
