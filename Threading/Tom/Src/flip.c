@@ -85,7 +85,7 @@ void destroy()
 	error = sem_destroy(&threadCounter);//cleunup semaphore
 	if(error<0)
 	{
-		perror("Semaphore init failed");
+		perror("Semaphore destroy failed");
 		exit(1);
 	}
 }
@@ -116,6 +116,12 @@ void printBits()
 void *thread(void *arg)
 {
 	threadCommand *command = (threadCommand*)arg; //cast arg to correct struct
+
+	if(command->numberToCheck<=0)
+	{
+		perror("Invalid value for numberToCheck in command");
+		exit(1);
+	}
 
 	uint128_t bitMask[NROF_BUFFERS] = {(uint128_t) 0}; //create array and sets all values to 0 to use for the masks later
 
