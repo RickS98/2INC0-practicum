@@ -20,14 +20,102 @@
 #include <unistd.h>
 #include <errno.h>
 #include <pthread.h>
+#include <semaphore.h>
 
 #include "prodcons.h"
 
 static ITEM buffer[BUFFER_SIZE];
+int upperBoundUsed = 0;
+int lowerBoundUsed = 0;
+sem_t upperBoundSemaphore;
+sem_t lowerBoundSemaphore;
 
 static void rsleep (int t);			// already implemented (see below)
 static ITEM get_next_item (void);	// already implemented (see below)
 
+void initialize()
+{
+	error = sem_init(&threadCounter, 0, BUFFER_SIZE);
+	if(error<0)
+	{
+		perror("upperBoundSemaphore init failed");
+		exit(1);
+	}
+
+	error = sem_init(&threadCounter, 0, 0);
+	if(error<0)
+	{
+		perror("lowerBoundSemaphore init failed");
+		exit(1);
+	}
+
+}
+
+void destroy()
+{
+	error = sem_destroy(&threadCounter);
+	if(error<0)
+	{
+		perror("upperBoundSemaphore destroy failed");
+		exit(1);
+	}
+
+	error = sem_destroy(&threadCounter);
+	if(error<0)
+	{
+		perror("lowerBoundSemaphore destroy failed");
+		exit(1);
+	}
+}
+
+void pushToBuffer(int number)
+{
+	error = sem_wait(&upperBoundSemaphore);
+	if(error<0)
+	{
+		perror("Semaphore post failed");
+		exit(1);
+	}
+
+	buffer[upperBoundUsed] = number;
+
+	upperBoundUsed = (upperBoundUsed+1) % BUFFER_SIZE;
+
+	error = sem_post(&lowerBoundSemaphore);
+	if(error<0)
+	{
+		perror("Semaphore post failed");
+		exit(1);
+	}
+}
+
+int popFromBuffer()
+{
+	error = sem_wait(&lowerBoundSemaphore);
+	if(error<0)
+	{
+		perror("Semaphoreerror = sem_wait(&upperBoundSemaphore);
+	if(error<0)
+	{
+		perror("Semaphore post failed");
+		exit(1);
+	} post failed");
+		exit(1);
+	}
+
+	int temp = buffer[lowerBoundUsed];
+
+	lowerBoundUsed = (lowerBoundUsed+1) % BUFER_SIZE;
+
+	error = sem_post(&upperBoundSemaphore);
+	if(error<0)
+	{
+		perror("Semaphore post failed");
+		exit(1);
+	}
+
+	return temp;
+}
 
 /* producer thread */
 static void * 
