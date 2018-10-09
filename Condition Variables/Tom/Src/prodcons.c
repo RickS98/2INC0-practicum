@@ -25,27 +25,48 @@
 #include "prodcons.h"
 
 static ITEM buffer[BUFFER_SIZE];
+
+static void rsleep (int t);			// already implemented (see below)
+static ITEM get_next_item (void);	// already implemented (see below)
+
 int upperBoundUsed = 0;
 int lowerBoundUsed = 0;
 sem_t upperBoundSemaphore;
 sem_t lowerBoundSemaphore;
 
-static void rsleep (int t);			// already implemented (see below)
-static ITEM get_next_item (void);	// already implemented (see below)
+pthread_mutex_t mutex;
+pthread_cond_t orderCondition;
+
+ITEM nextItemBuffer = 0;
+
+int error;
 
 void initialize()
 {
-	error = sem_init(&threadCounter, 0, BUFFER_SIZE);
+	error = sem_init(&upperBoundSemaphore, 0, BUFFER_SIZE);
 	if(error<0)
 	{
 		perror("upperBoundSemaphore init failed");
 		exit(1);
 	}
 
-	error = sem_init(&threadCounter, 0, 0);
+	error = sem_init(&lowerBoundSemaphore, 0, 0);
 	if(error<0)
 	{
 		perror("lowerBoundSemaphore init failed");
+		exit(1);
+	}
+
+	error = pthread_cond_init(&orderCondition,NULL);
+	if(error<0)
+	{
+		perror("orderCondition init failed");
+		exit(1);
+	}
+	error = pthread_mutex_init ( &mutex, NULL);
+	if(error<0)
+	{
+		perror("Mutex init failed");
 		exit(1);
 	}
 
@@ -53,27 +74,40 @@ void initialize()
 
 void destroy()
 {
-	error = sem_destroy(&threadCounter);
+	error = sem_destroy(&upperBoundSemaphore);
 	if(error<0)
 	{
 		perror("upperBoundSemaphore destroy failed");
 		exit(1);
 	}
 
-	error = sem_destroy(&threadCounter);
+	error = sem_destroy(&lowerBoundSemaphore);
 	if(error<0)
 	{
 		perror("lowerBoundSemaphore destroy failed");
 		exit(1);
 	}
+
+	error = pthread_cond_destroy(&orderCondition);
+	if(error<0)
+	{
+		perror("orderCondition destroy failed");
+		exit(1);
+	}
+	error = pthread_mutex_destroy(&mutex);
+	if(error<0)
+	{
+		perror("Mutex destroy failed");
+		exit(1);
+	}
 }
 
-void pushToBuffer(int number)
+void pushToBuffer(ITEM number)
 {
 	error = sem_wait(&upperBoundSemaphore);
 	if(error<0)
 	{
-		perror("Semaphore post failed");
+		perror("Semaphore wait failed");
 		exit(1);
 	}
 
@@ -89,23 +123,18 @@ void pushToBuffer(int number)
 	}
 }
 
-int popFromBuffer()
+ITEM popFromBuffer()
 {
 	error = sem_wait(&lowerBoundSemaphore);
 	if(error<0)
 	{
-		perror("Semaphoreerror = sem_wait(&upperBoundSemaphore);
-	if(error<0)
-	{
-		perror("Semaphore post failed");
-		exit(1);
-	} post failed");
+		perror("Semaphore wait failed");
 		exit(1);
 	}
 
-	int temp = buffer[lowerBoundUsed];
+	ITEM temp = buffer[lowerBoundUsed];
 
-	lowerBoundUsed = (lowerBoundUsed+1) % BUFER_SIZE;
+	lowerBoundUsed = (lowerBoundUsed+1) % BUFFER_SIZE;
 
 	error = sem_post(&upperBoundSemaphore);
 	if(error<0)
@@ -121,10 +150,11 @@ int popFromBuffer()
 static void * 
 producer (void * arg)
 {
-    while (true /* TODO: not all items produced */)
+    while (nextItemBuffer<NROF_ITEMS)
     {
         // TODO: 
         // * get the new item
+    	ITEM currentItem = get_next_item();
 		
         rsleep (100);	// simulating all kind of activities...
 		
@@ -133,11 +163,26 @@ producer (void * arg)
 		//
         // follow this pseudocode (according to the ConditionSynchronization lecture):
         //      mutex-lock;
+        pthread_mutex_lock(&mutex);
         //      while not condition-for-this-producer
+        while (nextItemBuffer != currentItem)
+        {
         //          wait-cv;
+            pthread_cond_wait(&orderCondition, &mutex);
+        }
         //      critical-section;
+
+        pushToBuffer(currentItem);
+
+        nextItemBuffer++;
+
         //      possible-cv-signals;
+        pthread_cond_broadcast(&orderCondition);
         //      mutex-unlock;
+        pthread_mutex_unlock(&mutex);
+
+
+
         //
         // (see condition_test() in condition_basics.c how to use condition variables)
     }
@@ -148,8 +193,14 @@ producer (void * arg)
 static void * 
 consumer (void * arg)
 {
-    while (true /* TODO: not all items retrieved from buffer[] */)
+	int foundValue = 0;
+
+    while (foundValue<NROF_ITEMS)
     {
+    	foundValue = popFromBuffer();
+
+    	printf("%d\n",foundValue);
+
         // TODO: 
 		// * get the next item from buffer[]
 		// * print the number to stdout
@@ -169,9 +220,37 @@ consumer (void * arg)
 
 int main (void)
 {
+	pthread_t threadId[NROF_PRODUCERS+1];
+
     // TODO: 
     // * startup the producer threads and the consumer thread
+	error = pthread_create (&threadId[0], NULL, consumer, NULL); //create the thread
+	if(error<0)
+	{
+		perror("Creating thread failed");
+		exit(1);
+	}
+	for(int i = 1;i<NROF_PRODUCERS+1;i++)
+	{
+		error = pthread_create (&threadId[i], NULL, producer, NULL); //create the thread
+		if(error<0)
+		{
+			perror("Creating thread failed");
+			exit(1);
+		}
+	}
+
     // * wait until all threads are finished  
+
+	for(int i = 0;i<NROF_PRODUCERS+1;i++)
+	{
+		error = pthread_join(threadId[i], NULL);
+		if(error<0)
+		{
+			perror("Joining thread failed during run");
+			exit(1);
+		}
+	}
     
     return (0);
 }
