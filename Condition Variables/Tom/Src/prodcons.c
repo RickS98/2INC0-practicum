@@ -195,6 +195,8 @@ consumer (void * arg)
 {
 	int foundValue = 0;
 
+	pthread_cond_broadcast(&orderCondition);
+
     while (foundValue<NROF_ITEMS)
     {
     	foundValue = popFromBuffer();
@@ -222,14 +224,10 @@ int main (void)
 {
 	pthread_t threadId[NROF_PRODUCERS+1];
 
+	initialize();
+
     // TODO: 
     // * startup the producer threads and the consumer thread
-	error = pthread_create (&threadId[0], NULL, consumer, NULL); //create the thread
-	if(error<0)
-	{
-		perror("Creating thread failed");
-		exit(1);
-	}
 	for(int i = 1;i<NROF_PRODUCERS+1;i++)
 	{
 		error = pthread_create (&threadId[i], NULL, producer, NULL); //create the thread
@@ -238,6 +236,13 @@ int main (void)
 			perror("Creating thread failed");
 			exit(1);
 		}
+	}
+
+	error = pthread_create (&threadId[0], NULL, consumer, NULL); //create the thread
+	if(error<0)
+	{
+		perror("Creating thread failed");
+		exit(1);
 	}
 
     // * wait until all threads are finished  
@@ -251,6 +256,8 @@ int main (void)
 			exit(1);
 		}
 	}
+
+	destroy();
     
     return (0);
 }
