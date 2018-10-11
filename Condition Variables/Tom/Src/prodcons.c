@@ -29,6 +29,8 @@ static ITEM buffer[BUFFER_SIZE];
 static void rsleep (int t);			// already implemented (see below)
 static ITEM get_next_item (void);	// already implemented (see below)
 
+pthread_t threadId[NROF_PRODUCERS+1];
+
 int upperBoundUsed = 0;
 int lowerBoundUsed = 0;
 sem_t upperBoundSemaphore;
@@ -38,7 +40,6 @@ pthread_mutex_t mutex;
 pthread_cond_t orderCondition;
 
 ITEM nextItemBuffer = 0;
-int processComplete = 0;
 
 int error;
 
@@ -103,6 +104,8 @@ void destroy()
 	}
 }
 
+
+
 void pushToBuffer(ITEM number)
 {
 	error = sem_wait(&upperBoundSemaphore);
@@ -149,7 +152,7 @@ ITEM popFromBuffer()
 
 /* producer thread */
 static void * 
-producer (void * arg)
+producer()
 {
     for (ITEM currentItem = get_next_item();currentItem<NROF_ITEMS; currentItem = get_next_item())
     {
@@ -186,10 +189,8 @@ producer (void * arg)
 
 /* consumer thread */
 static void * 
-consumer (void * arg)
+consumer()
 {
-
-
     for (int i = 0;i<NROF_ITEMS;i++)
     {
     	printf("%d\n",popFromBuffer());
@@ -199,14 +200,8 @@ consumer (void * arg)
 	return (NULL);
 }
 
-int main (void)
+void createThreads()
 {
-	pthread_t threadId[NROF_PRODUCERS+1];
-
-	initialize();
-
-    // TODO: 
-    // * startup the producer threads and the consumer thread
 	error = pthread_create (&threadId[0], NULL, consumer, NULL); //create the thread
 	if(error<0)
 	{
@@ -223,21 +218,36 @@ int main (void)
 			exit(1);
 		}
 	}
+}
+
+void joinThreads()
+{
+	for(int i = 0;i<NROF_PRODUCERS+1;i++)
+	{
+		error = pthread_join(threadId[i], NULL);
+		if(error<0)
+		{
+				perror("Joining thread failed during run");
+				exit(1);
+		}
+	}
+}
+
+int main (void)
+{
+	initialize();
+
+	createThreads();
+
+    // TODO: 
+    // * startup the producer threads and the consumer thread
+
 
 	pthread_cond_broadcast(&orderCondition);
 
     // * wait until all threads are finished  
 
-	for(int i = 0;i<NROF_PRODUCERS+1;i++)
-	{
-		error = pthread_join(threadId[i], NULL);
-		pthread_cond_broadcast(&orderCondition);
-		if(error<0)
-		{
-			perror("Joining thread failed during run");
-			exit(1);
-		}
-	}
+	joinThreads();
 
 	destroy();
     
