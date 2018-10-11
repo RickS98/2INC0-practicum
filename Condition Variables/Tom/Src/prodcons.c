@@ -38,6 +38,7 @@ pthread_mutex_t mutex;
 pthread_cond_t orderCondition;
 
 ITEM nextItemBuffer = 0;
+int processComplete = 0;
 
 int error;
 
@@ -150,41 +151,35 @@ ITEM popFromBuffer()
 static void * 
 producer (void * arg)
 {
-    while (nextItemBuffer<NROF_ITEMS)
+    for (ITEM currentItem = get_next_item();currentItem<NROF_ITEMS; currentItem = get_next_item())
     {
         // TODO: 
         // * get the new item
-    	ITEM currentItem = get_next_item();
 		
-        rsleep (100);	// simulating all kind of activities...
+    	rsleep (100);	// simulating all kind of activities...
 		
-		// TODO:
-		// * put the item into buffer[]
-		//
-        // follow this pseudocode (according to the ConditionSynchronization lecture):
-        //      mutex-lock;
-        pthread_mutex_lock(&mutex);
-        //      while not condition-for-this-producer
-        while (nextItemBuffer != currentItem)
-        {
-        //          wait-cv;
-            pthread_cond_wait(&orderCondition, &mutex);
-        }
-        //      critical-section;
-
-        pushToBuffer(currentItem);
-
-        nextItemBuffer++;
-
-        //      possible-cv-signals;
-        pthread_cond_broadcast(&orderCondition);
-        //      mutex-unlock;
-        pthread_mutex_unlock(&mutex);
-
-
-
+    	// TODO:
+    	// * put the item into buffer[]
+    	//
+    	// follow this pseudocode (according to the ConditionSynchronization lecture):
+    	//      mutex-lock;
+    	pthread_mutex_lock(&mutex);
+    	//      while not condition-for-this-producer
+    	while (nextItemBuffer != currentItem)
+    	{
+    	//          wait-cv;
+    		pthread_cond_wait(&orderCondition, &mutex);
+    	}
+    	//      critical-section;
+   		pushToBuffer(currentItem);
+   		nextItemBuffer++;
+   		//      possible-cv-signals;
+   		pthread_cond_broadcast(&orderCondition);
+   		//      mutex-unlock;
+   		pthread_mutex_unlock(&mutex);
         //
         // (see condition_test() in condition_basics.c how to use condition variables)
+
     }
 	return (NULL);
 }
@@ -193,27 +188,11 @@ producer (void * arg)
 static void * 
 consumer (void * arg)
 {
-	int foundValue = 0;
 
-	pthread_cond_broadcast(&orderCondition);
 
-    while (foundValue<NROF_ITEMS)
+    for (int i = 0;i<NROF_ITEMS;i++)
     {
-    	foundValue = popFromBuffer();
-
-    	printf("%d\n",foundValue);
-
-        // TODO: 
-		// * get the next item from buffer[]
-		// * print the number to stdout
-        //
-        // follow this pseudocode (according to the ConditionSynchronization lecture):
-        //      mutex-lock;
-        //      while not condition-for-this-consumer
-        //          wait-cv;
-        //      critical-section;
-        //      possible-cv-signals;
-        //      mutex-unlock;
+    	printf("%d\n",popFromBuffer());
 		
         rsleep (100);		// simulating all kind of activities...
     }
@@ -228,6 +207,13 @@ int main (void)
 
     // TODO: 
     // * startup the producer threads and the consumer thread
+	error = pthread_create (&threadId[0], NULL, consumer, NULL); //create the thread
+	if(error<0)
+	{
+		perror("Creating thread failed");
+		exit(1);
+	}
+
 	for(int i = 1;i<NROF_PRODUCERS+1;i++)
 	{
 		error = pthread_create (&threadId[i], NULL, producer, NULL); //create the thread
@@ -238,18 +224,14 @@ int main (void)
 		}
 	}
 
-	error = pthread_create (&threadId[0], NULL, consumer, NULL); //create the thread
-	if(error<0)
-	{
-		perror("Creating thread failed");
-		exit(1);
-	}
+	pthread_cond_broadcast(&orderCondition);
 
     // * wait until all threads are finished  
 
 	for(int i = 0;i<NROF_PRODUCERS+1;i++)
 	{
 		error = pthread_join(threadId[i], NULL);
+		pthread_cond_broadcast(&orderCondition);
 		if(error<0)
 		{
 			perror("Joining thread failed during run");
