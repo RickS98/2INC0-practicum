@@ -131,14 +131,14 @@ static void * consumer (void * arg)
 
         //      while not condition-for-this-consumer
         //          wait-cv;
-        while( !(buffer.pos>=0) && (buffer.next < NROF_ITEMS) ) {
+        while( !(buffer.pos>=0) && (buffer.next < NROF_ITEMS) ) {// waiting only makes sense if not all items have been processed which means next has not reached NROF_ITEMS yet.
             fprintf(stderr, "\t\t\t\t\t\t\tcons%lu.%lu: wait buffer.pos %d\n", data->thread_id%10000, PRTTIME, buffer.pos);
 #if (NROF_CONSUMERS == 1)
             pthread_cond_wait(&buffer_cond_produced, &buffer_mutex);
 #elif (NROF_CONSUMERS> 1)
             struct timespec tp;
             clock_gettime(CLOCK_REALTIME, &tp);
-            tp.tv_sec += 1;
+            tp.tv_sec += 1; // 1 second timeout
             pthread_cond_timedwait(&buffer_cond_produced, &buffer_mutex, &tp); //timed because the consumer threads do not know who took the last item, so check if condition still valid from time to time. They do not communicate with each other (yet...).
 #else
     #error "NROF_CONSUMERS needs to be >= 1"
