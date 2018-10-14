@@ -27,6 +27,10 @@
 
 #define MAX(x,y)    ((x<y)?y:x)
 
+
+#define USE_MONITOR
+
+
  typedef struct {
     pthread_t   thread_id;
     ITEM    item;
@@ -42,6 +46,7 @@ typedef struct {
 buffer_s buffer;
 
 static pthread_mutex_t buffer_mutex         = PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t       buffer_cond_buffadd = PTHREAD_COND_INITIALIZER;
 static pthread_cond_t       buffer_cond_produced = PTHREAD_COND_INITIALIZER;
 static pthread_cond_t       buffer_cond_consumed = PTHREAD_COND_INITIALIZER;
 
@@ -50,16 +55,41 @@ static ITEM get_next_item (void);   // already implemented (see below)
 
 #define PRTTIME     (clock())
 
-void monitor (void)
+#ifdef USE_MONITOR
+void buffer_put (int item, pthread_t thread_id)
 {
+		int err = pthread_mutex_lock( &buffer_mutex );//critical section start
+        if (err < 0) perror("mx_lock_prod");
+        //      while not condition-for-this-producer
+        //          wait-cv;
+		struct timespec tp;
+		clock_gettime(CLOCK_REALTIME, &tp);
+		
+        while( !(buffer.pos<BUFFER_SIZE-1) || !(item==buffer.next) ) {//de morgan
+            fprintf(stderr, "prod%lu.%lu: wait item %d, pos %d, bufval %d\n", thread_id%10000, PRTTIME, item, buffer.pos, buffer.items[MAX(buffer.pos,0)]);
+            //pthread_cond_wait(&buffer_cond_consumed, &buffer_mutex);
+            pthread_cond_timedwait(&buffer_cond_buffadd, &buffer_mutex, &tp);
+        }
+        //      critical-section;
+        fprintf(stderr, "prod%lu.%lu: before incr buffer[pos]:%d\n", thread_id%10000, PRTTIME, buffer.pos);
+
+        ++buffer.pos;
+
+        buffer.items[buffer.pos] = item;
+        fprintf(stderr, "prod%lu.%lu: put item %d at position %d, buffer[pos]:%d\n", thread_id%10000, PRTTIME, item, buffer.pos, buffer.items[buffer.pos]);
+
+        ++buffer.next;
+        fprintf(stderr, "prod%lu.%lu: next expected item:%d\n", thread_id%10000, PRTTIME, buffer.next);
 
 }
+#endif
 
 /* producer thread */
 static void * producer (void * arg)
 {
     thread_data_t * data = (thread_data_t *)arg;
-
+	int err;
+	
     fprintf(stderr, "prod%lu.%lu: thread %lu started\n", data->thread_id%10000, PRTTIME, data->thread_id);
     for(data->item = get_next_item();data->item < NROF_ITEMS; data->item = get_next_item())
     {
@@ -72,7 +102,8 @@ static void * producer (void * arg)
         // * put the item into buffer[]
         //
         // follow this pseudocode (according to the ConditionSynchronization lecture):
-        int err = pthread_mutex_lock( &buffer_mutex );//critical section start
+#ifndef USE_MONITOR
+        err = pthread_mutex_lock( &buffer_mutex );//critical section start
         if (err < 0) perror("mx_lock_prod");
 
         //      while not condition-for-this-producer
@@ -91,7 +122,9 @@ static void * producer (void * arg)
 
         ++buffer.next;
         fprintf(stderr, "prod%lu.%lu: next expected item:%d\n", data->thread_id%10000, PRTTIME, buffer.next);
-
+#else
+		buffer_put(data->item, data->thread_id);
+#endif
         //      possible-cv-signals;
         pthread_cond_signal (&buffer_cond_produced);
         fprintf(stderr, "prod%lu.%lu: signal send\n",data->thread_id%10000,  PRTTIME);
@@ -154,7 +187,11 @@ static void * consumer (void * arg)
         fprintf(stderr, "\t\t\t\t\t\t\tcons%lu.%lu: decremended pos, curr pos is: %d\n", data->thread_id%10000, PRTTIME, buffer.pos);
         //      possible-cv-signals;
         fprintf(stderr, "\t\t\t\t\t\t\tcons%lu.%lu: signal send\n", data->thread_id%10000, PRTTIME);
+#ifndef USE_MONITOR
         pthread_cond_broadcast(&buffer_cond_consumed);
+#else
+        pthread_cond_signal(&buffer_cond_buffadd);
+#endif
 
         //      mutex-unlock;
         err = pthread_mutex_unlock(&buffer_mutex );//critical section stop
