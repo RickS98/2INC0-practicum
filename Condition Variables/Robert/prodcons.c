@@ -80,7 +80,6 @@ static void * producer (void * arg)
         //
         // follow this pseudocode (according to the ConditionSynchronization lecture):
         int err = pthread_mutex_lock( &buffer_mutex );//critical section start
-        //if (err < 0) perror("mx_lock_prod");
         ERR(err,"mx_lock_prod");
 
         //      while not condition-for-this-producer
@@ -110,7 +109,6 @@ static void * producer (void * arg)
 			pthread_cond_broadcast(&buffer_cond_consumed); // tell other producers that you put something in the buffer so they can check if they can proceed.
         //      mutex-unlock;
         err = pthread_mutex_unlock( &buffer_mutex );//critical section stop
-        //if (err < 0) perror("mx_unlock_prod");
         ERR(err,"mx_unlock_prod");
 
         // (see condition_test() in condition_basics.c how to use condition variables)
@@ -138,7 +136,6 @@ static void * consumer (void * arg)
         // follow this pseudocode (according to the ConditionSynchronization lecture):
         //      mutex-lock;
         int err = pthread_mutex_lock( &buffer_mutex );//critical section start
-        //if (err < 0) perror("mx_lock_cons");
         ERR(err,"mx_lock_cons");
 
         //      while not condition-for-this-consumer
@@ -164,7 +161,6 @@ static void * consumer (void * arg)
             fprintf(stderr, "\t\t\t\t\t\t\tcons%lu.%lu: cons done signal send\n", data->thread_id%10000, PRTTIME);
             //      mutex-unlock;
             err = pthread_mutex_unlock(&buffer_mutex );//critical section stop
-            //if (err < 0) perror("mx_unlock_cons");
             ERR(err,"mx_unlock_cons");
             break;
         }
@@ -192,7 +188,6 @@ static void * consumer (void * arg)
 
         //      mutex-unlock;
         err = pthread_mutex_unlock(&buffer_mutex );//critical section stop
-        //if (err < 0) perror("mx_unlock_cons");
         ERR(err,"mx_unlock_cons");
         rsleep (100);       // simulating all kind of activities...
     }
@@ -216,7 +211,6 @@ int main (void)
         thread_data_prod[tp].item = 0;
 
         err = pthread_create(&thread_data_prod[tp].thread_id, NULL, producer, (void *)&(thread_data_prod[tp]));
-        //if (err < 0) perror("producer thread");
         ERR(err,"producer tread");
     }
 
@@ -227,19 +221,16 @@ int main (void)
         thread_data_cons[tc].item = 0;
 
         err = pthread_create(&thread_data_cons[tc].thread_id, NULL, consumer, (void *)&(thread_data_cons[tc]));
-        //if (err < 0) perror("consumer thread");
         ERR(err,"consumer thread");
     }
 
     for(;tp > 0; --tp) {// if we have at least one producer...
         int err = pthread_join(thread_data_prod[tp-1].thread_id, NULL);
-        //if (err < 0) perror("prod join");
         ERR(err,"prod join");
     }
 
     for(;tc > 0; --tc) {// if we have at least one consumer...
         int err = pthread_join(thread_data_cons[tc-1].thread_id, NULL);
-        //if (err < 0) perror("cons join");
         ERR(err,"cons join");
     }
 
