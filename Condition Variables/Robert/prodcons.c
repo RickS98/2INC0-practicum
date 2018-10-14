@@ -21,6 +21,7 @@
 #include <errno.h>
 #include <pthread.h>
 #include <time.h>
+#include <semaphore.h>
 
 #include "prodcons.h"
 
@@ -37,6 +38,7 @@ typedef struct {
 	int		next;
 }buffer_s;
 
+
 buffer_s buffer;
 
 static pthread_mutex_t buffer_mutex 		= PTHREAD_MUTEX_INITIALIZER;
@@ -49,17 +51,24 @@ static ITEM get_next_item (void);	// already implemented (see below)
 
 #define PRTTIME		(clock())
 
+void monitor (void)
+{
+	
+}
+
+
 /* producer thread */
 static void * producer (void * arg)
 {
 	thread_data_t * data = (thread_data_t *)arg;
 	
 	fprintf(stderr, "prod%lu.%lu: thread %lu started\n", data->thread_id%10000, PRTTIME, data->thread_id);
-    while (true /* TODO: not all items produced */)
+    //while (true /* TODO: not all items produced */)
+	for(data->item = get_next_item();data->item < NROF_ITEMS; data->item = get_next_item())
     {
         // TODO: 
         // * get the new item
-		data->item = get_next_item();
+		//data->item = get_next_item();
 		fprintf(stderr, "prod%lu.%lu: received item: %d\n", data->thread_id%10000, PRTTIME, data->item);
 
 			
@@ -71,25 +80,26 @@ static void * producer (void * arg)
         // follow this pseudocode (according to the ConditionSynchronization lecture):
 		int err = pthread_mutex_lock( &buffer_mutex );//critical section start
 		if (err < 0) perror("mx_lock_prod");
+
+		// if (data->item == NROF_ITEMS) {
+			// //buffer.next = NROF_ITEMS;
+			// pthread_cond_signal (&buffer_cond_produced);
+			// //pthread_cond_broadcast (&buffer_cond_consumed);
+			// fprintf(stderr, "prod%lu.%lu: signal send\n",data->thread_id%10000,  PRTTIME);
+			// fprintf(stderr, "prod: received all items\n\n");
+			// err = pthread_mutex_unlock( &buffer_mutex );//critical section stop
+			// if (err < 0) perror("mx_unlock_prod");
+			// break;
+		// }
         //      while not condition-for-this-producer
         //          wait-cv;
-		if (data->item == NROF_ITEMS) {
-			buffer.next = NROF_ITEMS;
-			pthread_cond_signal (&buffer_cond_produced);
-			pthread_cond_broadcast (&buffer_cond_consumed);
-			fprintf(stderr, "prod%lu.%lu: signal send\n",data->thread_id%10000,  PRTTIME);
-			fprintf(stderr, "prod: received all items\n\n");
-			err = pthread_mutex_unlock( &buffer_mutex );//critical section stop
-			if (err < 0) perror("mx_unlock_prod");
-			break;
-		}
-
-		while( !(buffer.pos<BUFFER_SIZE) || !(data->item==buffer.next+1) ) {//de morgan
+		while( !(buffer.pos<BUFFER_SIZE-1) || !(data->item==buffer.next) ) {//de morgan
 			fprintf(stderr, "prod%lu.%lu: wait item %d, pos %d, bufval %d\n", data->thread_id%10000, PRTTIME, data->item, buffer.pos, buffer.items[MAX(buffer.pos,0)]);
 			pthread_cond_wait(&buffer_cond_consumed, &buffer_mutex);
 		}
         //      critical-section;
 		++buffer.pos;
+
 		buffer.items[buffer.pos] = data->item;
 		fprintf(stderr, "prod%lu.%lu: put item %d at position %d, buffer[pos]:%d\n", data->thread_id%10000, PRTTIME, data->item, buffer.pos, buffer.items[buffer.pos]);
 
@@ -104,6 +114,11 @@ static void * producer (void * arg)
 		if (err < 0) perror("mx_unlock_prod");
         // (see condition_test() in condition_basics.c how to use condition variables)
     }
+
+	pthread_cond_signal (&buffer_cond_produced);
+	fprintf(stderr, "prod%lu.%lu: signal send\n",data->thread_id%10000,  PRTTIME);
+	fprintf(stderr, "prod: received all items\n\n");
+
 	pthread_exit(0);
 }
 
@@ -124,10 +139,10 @@ static void * consumer (void * arg)
 		int err = pthread_mutex_lock( &buffer_mutex );//critical section start
 		if (err < 0) perror("mx_lock_cons");
 		
-		if ((buffer.next == NROF_ITEMS) && (buffer.pos<0)) {
-			fprintf(stderr, "cons: printed all items\n\n");
-			break;
-		}
+		// if ((buffer.next == NROF_ITEMS) && (buffer.pos<0)) {
+			// fprintf(stderr, "cons: printed all items\n\n");
+			// break;
+		// }
 
         //      while not condition-for-this-consumer
         //          wait-cv;
@@ -155,7 +170,7 @@ static void * consumer (void * arg)
 		fprintf(stderr, "\t\t\t\t\t\t\tcons%lu.%lu: pos is now: %d\n", data->thread_id%10000, PRTTIME, buffer.pos);
         //      possible-cv-signals;
 		fprintf(stderr, "\t\t\t\t\t\t\tcons%lu.%lu: signal send\n", data->thread_id%10000, PRTTIME);
-		pthread_cond_signal (&buffer_cond_consumed);
+		pthread_cond_broadcast(&buffer_cond_consumed);
 
         //      mutex-unlock;
 		err = pthread_mutex_unlock(&buffer_mutex );//critical section stop
@@ -194,6 +209,7 @@ int main (void)
 	
 	//clear the bufer and its cnt
 	memset(&buffer,-1,sizeof(buffer_s)); // -1 signify's init state, yes memset works because -1 = 0xff
+	buffer.next = 0;
 
 	//start everything by generating a signal;
 	//pthread_cond_signal (&buffer_cond);
