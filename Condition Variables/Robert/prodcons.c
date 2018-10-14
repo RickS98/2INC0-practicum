@@ -25,6 +25,9 @@
 
 #include "prodcons.h"
 
+
+#define NROF_CONSUMERS          1
+
 #define MAX(x,y)    ((x<y)?y:x)
 
  typedef struct {
@@ -38,10 +41,9 @@ typedef struct {
     int     next;
 }buffer_s;
 
-
 buffer_s buffer;
 
-static pthread_mutex_t buffer_mutex         = PTHREAD_MUTEX_INITIALIZER;
+static pthread_mutex_t buffer_mutex              = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t       buffer_cond_produced = PTHREAD_COND_INITIALIZER;
 static pthread_cond_t       buffer_cond_consumed = PTHREAD_COND_INITIALIZER;
 
@@ -125,16 +127,25 @@ static void * consumer (void * arg)
         int err = pthread_mutex_lock( &buffer_mutex );//critical section start
         if (err < 0) perror("mx_lock_cons");
 
-        if ((buffer.next == NROF_ITEMS) && (buffer.pos<0)) {
-            fprintf(stderr, "cons: printed all items\n\n");
-            break;
-        }
-
         //      while not condition-for-this-consumer
         //          wait-cv;
-        while( !(buffer.pos>=0) ) {
+        while( !(buffer.pos>=0) && (buffer.next < NROF_ITEMS) ) {
             fprintf(stderr, "\t\t\t\t\t\t\tcons%lu.%lu: wait buffer.pos %d\n", data->thread_id%10000, PRTTIME, buffer.pos);
-            pthread_cond_wait(&buffer_cond_produced, &buffer_mutex);
+            //pthread_cond_wait(&buffer_cond_produced, &buffer_mutex);
+            struct timespec tp;
+            clock_gettime(CLOCK_REALTIME, &tp);
+            tp.tv_sec += 1;
+            pthread_cond_timedwait(&buffer_cond_produced, &buffer_mutex, &tp);
+        }
+
+        if ((buffer.next == NROF_ITEMS) && (buffer.pos<0)) { // buffer.next == NROF_ITEMS is a thread exit condition but only if all items have been printed.
+            fprintf(stderr, "\t\t\t\t\t\t\tcons%lu.%lu: printed all items\n\n", data->thread_id%10000, PRTTIME);
+            pthread_cond_broadcast (&buffer_cond_produced); // make sure the other consumers are notified that we are done consuming.
+            fprintf(stderr, "\t\t\t\t\t\t\tcons%lu.%lu: cons done signal send\n", data->thread_id%10000, PRTTIME);
+            //      mutex-unlock;
+            err = pthread_mutex_unlock(&buffer_mutex );//critical section stop
+            if (err < 0) perror("mx_unlock_cons");
+            break;
         }
 
         //      critical-section;
@@ -154,7 +165,9 @@ static void * consumer (void * arg)
         fprintf(stderr, "\t\t\t\t\t\t\tcons%lu.%lu: decremended pos, curr pos is: %d\n", data->thread_id%10000, PRTTIME, buffer.pos);
         //      possible-cv-signals;
         fprintf(stderr, "\t\t\t\t\t\t\tcons%lu.%lu: signal send\n", data->thread_id%10000, PRTTIME);
-        pthread_cond_broadcast(&buffer_cond_consumed);
+
+        if( !(buffer.pos>=0) ) // only signal that things are consumed if the buffer is empty
+            pthread_cond_broadcast(&buffer_cond_consumed);
 
         //      mutex-unlock;
         err = pthread_mutex_unlock(&buffer_mutex );//critical section stop
@@ -302,13 +315,6 @@ get_next_item(void)
     return (found);
 }
 
-
-/*
-proc producer =
-[ while true do
-
-
-*/
 
 
 
