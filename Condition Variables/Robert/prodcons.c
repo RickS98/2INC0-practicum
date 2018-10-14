@@ -25,9 +25,6 @@
 
 #include "prodcons.h"
 
-
-#define NROF_CONSUMERS          131
-
 #define MAX(x,y)    ((x<y)?y:x)
 
  typedef struct {
@@ -41,9 +38,10 @@ typedef struct {
     int     next;
 }buffer_s;
 
+
 buffer_s buffer;
 
-static pthread_mutex_t buffer_mutex              = PTHREAD_MUTEX_INITIALIZER;
+static pthread_mutex_t buffer_mutex         = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t       buffer_cond_produced = PTHREAD_COND_INITIALIZER;
 static pthread_cond_t       buffer_cond_consumed = PTHREAD_COND_INITIALIZER;
 
@@ -51,11 +49,6 @@ static void rsleep (int t);         // already implemented (see below)
 static ITEM get_next_item (void);   // already implemented (see below)
 
 #define PRTTIME     (clock())
-
-#define ERR(err,s)  if (err < 0) { /* something bad happened */             \
-                        perror(s); /* print how bad it was */               \
-                        exit(-1);  /* then act imperial soldier like... */  \
-                    }
 
 void monitor (void)
 {
@@ -80,7 +73,7 @@ static void * producer (void * arg)
         //
         // follow this pseudocode (according to the ConditionSynchronization lecture):
         int err = pthread_mutex_lock( &buffer_mutex );//critical section start
-        ERR(err,"mx_lock_prod");
+        if (err < 0) perror("mx_lock_prod");
 
         //      while not condition-for-this-producer
         //          wait-cv;
@@ -88,29 +81,23 @@ static void * producer (void * arg)
             fprintf(stderr, "prod%lu.%lu: wait item %d, pos %d, bufval %d\n", data->thread_id%10000, PRTTIME, data->item, buffer.pos, buffer.items[MAX(buffer.pos,0)]);
             pthread_cond_wait(&buffer_cond_consumed, &buffer_mutex);
         }
-        // enter critical-section;
+        //      critical-section;
         fprintf(stderr, "prod%lu.%lu: before incr buffer[pos]:%d\n", data->thread_id%10000, PRTTIME, buffer.pos);
 
-        //go to the next buffer position we will write to.
         ++buffer.pos;
 
-        //put it in the buffer
         buffer.items[buffer.pos] = data->item;
         fprintf(stderr, "prod%lu.%lu: put item %d at position %d, buffer[pos]:%d\n", data->thread_id%10000, PRTTIME, data->item, buffer.pos, buffer.items[buffer.pos]);
 
         ++buffer.next;
         fprintf(stderr, "prod%lu.%lu: next expected item:%d\n", data->thread_id%10000, PRTTIME, buffer.next);
 
-        //tell consumers something was added to the buffer.
+        //      possible-cv-signals;
         pthread_cond_signal (&buffer_cond_produced);
         fprintf(stderr, "prod%lu.%lu: signal send\n",data->thread_id%10000,  PRTTIME);
-
-		if(buffer.pos < BUFFER_SIZE-1) // if there is still space in the buffer
-			pthread_cond_broadcast(&buffer_cond_consumed); // tell other producers that you put something in the buffer so they can check if they can proceed.
         //      mutex-unlock;
         err = pthread_mutex_unlock( &buffer_mutex );//critical section stop
-        ERR(err,"mx_unlock_prod");
-
+        if (err < 0) perror("mx_unlock_prod");
         // (see condition_test() in condition_basics.c how to use condition variables)
     }
 
@@ -136,33 +123,18 @@ static void * consumer (void * arg)
         // follow this pseudocode (according to the ConditionSynchronization lecture):
         //      mutex-lock;
         int err = pthread_mutex_lock( &buffer_mutex );//critical section start
-        ERR(err,"mx_lock_cons");
+        if (err < 0) perror("mx_lock_cons");
+
+        if ((buffer.next == NROF_ITEMS) && (buffer.pos<0)) {
+            fprintf(stderr, "cons: printed all items\n\n");
+            break;
+        }
 
         //      while not condition-for-this-consumer
         //          wait-cv;
-        while( !(buffer.pos>=0) && (buffer.next < NROF_ITEMS) ) {
+        while( !(buffer.pos>=0) ) {
             fprintf(stderr, "\t\t\t\t\t\t\tcons%lu.%lu: wait buffer.pos %d\n", data->thread_id%10000, PRTTIME, buffer.pos);
-#if (NROF_CONSUMERS == 1)
             pthread_cond_wait(&buffer_cond_produced, &buffer_mutex);
-#elif (NROF_CONSUMERS> 1)
-            struct timespec tp;
-            clock_gettime(CLOCK_REALTIME, &tp);
-            tp.tv_sec += 1;
-            pthread_cond_timedwait(&buffer_cond_produced, &buffer_mutex, &tp); //timed because the consumer threads do not kno who took the last item. they do not communicate with each other (yet).
-#else
-    #error "NROF_CONSUMERS needs to be >= 1"
-#endif
-        }
-
-        if ((buffer.next == NROF_ITEMS) && (buffer.pos<0)) { // buffer.next == NROF_ITEMS is a thread exit condition but only if all items have been printed.
-        //if ( (buffer.items[0] == NROF_ITEMS) ) { // buffer.next == NROF_ITEMS is a thread exit condition but only if all items have been printed.
-            fprintf(stderr, "\t\t\t\t\t\t\tcons%lu.%lu: printed all items\n\n", data->thread_id%10000, PRTTIME);
-            pthread_cond_broadcast (&buffer_cond_produced); // make sure the other consumers are notified that I think that we are done consuming.
-            fprintf(stderr, "\t\t\t\t\t\t\tcons%lu.%lu: cons done signal send\n", data->thread_id%10000, PRTTIME);
-            //      mutex-unlock;
-            err = pthread_mutex_unlock(&buffer_mutex );//critical section stop
-            ERR(err,"mx_unlock_cons");
-            break;
         }
 
         //      critical-section;
@@ -182,13 +154,11 @@ static void * consumer (void * arg)
         fprintf(stderr, "\t\t\t\t\t\t\tcons%lu.%lu: decremended pos, curr pos is: %d\n", data->thread_id%10000, PRTTIME, buffer.pos);
         //      possible-cv-signals;
         fprintf(stderr, "\t\t\t\t\t\t\tcons%lu.%lu: signal send\n", data->thread_id%10000, PRTTIME);
-
-        //if( !(buffer.pos>=0) ) // only signal that things are consumed if the buffer is empty
-            pthread_cond_broadcast(&buffer_cond_consumed);
+        pthread_cond_broadcast(&buffer_cond_consumed);
 
         //      mutex-unlock;
         err = pthread_mutex_unlock(&buffer_mutex );//critical section stop
-        ERR(err,"mx_unlock_cons");
+        if (err < 0) perror("mx_unlock_cons");
         rsleep (100);       // simulating all kind of activities...
     }
     pthread_exit(0);
@@ -211,7 +181,7 @@ int main (void)
         thread_data_prod[tp].item = 0;
 
         err = pthread_create(&thread_data_prod[tp].thread_id, NULL, producer, (void *)&(thread_data_prod[tp]));
-        ERR(err,"producer tread");
+        if (err < 0) perror("producer");
     }
 
     thread_data_t* thread_data_cons = calloc(NROF_CONSUMERS,sizeof(thread_data_t));
@@ -221,17 +191,17 @@ int main (void)
         thread_data_cons[tc].item = 0;
 
         err = pthread_create(&thread_data_cons[tc].thread_id, NULL, consumer, (void *)&(thread_data_cons[tc]));
-        ERR(err,"consumer thread");
+        if (err < 0) perror("consumer");
     }
 
     for(;tp > 0; --tp) {// if we have at least one producer...
         int err = pthread_join(thread_data_prod[tp-1].thread_id, NULL);
-        ERR(err,"prod join");
+        if (err < 0) perror("prod join");
     }
 
     for(;tc > 0; --tc) {// if we have at least one consumer...
         int err = pthread_join(thread_data_cons[tc-1].thread_id, NULL);
-        ERR(err,"cons join");
+        if (err < 0) perror("cons join");
     }
 
     pthread_cond_destroy(&buffer_cond_produced);
@@ -332,6 +302,13 @@ get_next_item(void)
     return (found);
 }
 
+
+/*
+proc producer =
+[ while true do
+
+
+*/
 
 
 
