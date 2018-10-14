@@ -76,6 +76,7 @@ static void * producer (void * arg)
 		if (data->item == NROF_ITEMS) {
 			buffer.next = NROF_ITEMS;
 			pthread_cond_signal (&buffer_cond_produced);
+			pthread_cond_broadcast (&buffer_cond_consumed);
 			fprintf(stderr, "prod%lu.%lu: signal send\n",data->thread_id%10000,  PRTTIME);
 			fprintf(stderr, "prod: received all items\n\n");
 			err = pthread_mutex_unlock( &buffer_mutex );//critical section stop
@@ -122,6 +123,11 @@ static void * consumer (void * arg)
         //      mutex-lock;
 		int err = pthread_mutex_lock( &buffer_mutex );//critical section start
 		if (err < 0) perror("mx_lock_cons");
+		
+		if ((buffer.next == NROF_ITEMS) && (buffer.pos<0)) {
+			fprintf(stderr, "cons: printed all items\n\n");
+			break;
+		}
 
         //      while not condition-for-this-consumer
         //          wait-cv;
@@ -131,10 +137,7 @@ static void * consumer (void * arg)
 			pthread_cond_wait(&buffer_cond_produced, &buffer_mutex);
 		}
 		
-		if (buffer.next == NROF_ITEMS) {
-			fprintf(stderr, "cons: printed all items\n\n");
-			break;
-		}
+
 		//      critical-section;
 		//take one item from the buffer & print it
 		fprintf(stderr, "\t\t\t\t\t\t\tcons%lu.%lu: print buffer@pos: %d\n", data->thread_id%10000, PRTTIME, buffer.pos);
