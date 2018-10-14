@@ -26,12 +26,12 @@
 #include "prodcons.h"
 
 
-#define NROF_CONSUMERS          3
+#define NROF_CONSUMERS          1
 
 #define _NO_DEBUGOUT_COND_VARS
 
 #ifdef _NO_DEBUGOUT_COND_VARS
-#define fprintf(...)	// disable fprintf which is only used here to print to stderr (so as to check if their delay is not helping things work...)[ugly, should make this a proper macro]
+#define fprintf(...)    // disable fprintf which is only used here to print to stderr (so as to check if their delay is not helping things work...)[ugly, should make this a proper macro]
 #endif
 
 #define MAX(x,y)    ((x<y)?y:x)
@@ -71,8 +71,8 @@ static void * producer (void * arg)
 
     fprintf(stderr, "prod%lu.%lu: thread %lu started\n", data->thread_id%10000, PRTTIME, data->thread_id);
     for(data->item = get_next_item();data->item < NROF_ITEMS; data->item = get_next_item()) {// * get the new item
-   
-		fprintf(stderr, "prod%lu.%lu: received item: %d\n", data->thread_id%10000, PRTTIME, data->item);
+
+        fprintf(stderr, "prod%lu.%lu: received item: %d\n", data->thread_id%10000, PRTTIME, data->item);
 
         rsleep (100);   // simulating all kind of activities...
 
@@ -102,7 +102,7 @@ static void * producer (void * arg)
         pthread_cond_signal (&buffer_cond_produced);
         fprintf(stderr, "prod%lu.%lu: signal send\n",data->thread_id%10000,  PRTTIME);
 
-		//but also inform other producers that something was added to the the buffer so they can check if they can proceed.
+        //but also inform other producers that something was added to the the buffer so they can check if they can proceed.
         pthread_cond_broadcast(&buffer_cond_consumed);
 
         //mutex-unlock
@@ -110,8 +110,6 @@ static void * producer (void * arg)
         ERR(err,"mx_unlock_prod");
     }
 
-    //pthread_cond_signal (&buffer_cond_produced);
-    //fprintf(stderr, "prod%lu.%lu: signal send\n",data->thread_id%10000,  PRTTIME);
     fprintf(stderr, "prod: received all items\n\n");
 
     pthread_exit(0);
@@ -141,7 +139,7 @@ static void * consumer (void * arg)
             struct timespec tp;
             clock_gettime(CLOCK_REALTIME, &tp);
             tp.tv_sec += 1;
-            pthread_cond_timedwait(&buffer_cond_produced, &buffer_mutex, &tp); //timed because the consumer threads do not know who took the last item. They do not communicate with each other (yet...).
+            pthread_cond_timedwait(&buffer_cond_produced, &buffer_mutex, &tp); //timed because the consumer threads do not know who took the last item, so check if condition still valid from time to time. They do not communicate with each other (yet...).
 #else
     #error "NROF_CONSUMERS needs to be >= 1"
 #endif
@@ -175,8 +173,7 @@ static void * consumer (void * arg)
         //      possible-cv-signals;
         fprintf(stderr, "\t\t\t\t\t\t\tcons%lu.%lu: signal send\n", data->thread_id%10000, PRTTIME);
 
-        //if( !(buffer.pos>=0) ) // only signal that things are consumed if the buffer is empty
-            pthread_cond_broadcast(&buffer_cond_consumed); // broadcast to all sleeping consumers that something got consumed.
+        pthread_cond_broadcast(&buffer_cond_consumed); // broadcast to all sleeping consumers that something got consumed.
 
         //      mutex-unlock;
         err = pthread_mutex_unlock(&buffer_mutex );//critical section stop
