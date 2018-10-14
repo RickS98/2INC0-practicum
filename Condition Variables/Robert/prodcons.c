@@ -98,6 +98,8 @@ static void * producer (void * arg)
 			pthread_cond_wait(&buffer_cond_consumed, &buffer_mutex);
 		}
         //      critical-section;
+		fprintf(stderr, "prod%lu.%lu: before incr buffer[pos]:%d\n", data->thread_id%10000, PRTTIME, buffer.pos);
+
 		++buffer.pos;
 
 		buffer.items[buffer.pos] = data->item;
@@ -139,10 +141,10 @@ static void * consumer (void * arg)
 		int err = pthread_mutex_lock( &buffer_mutex );//critical section start
 		if (err < 0) perror("mx_lock_cons");
 		
-		// if ((buffer.next == NROF_ITEMS) && (buffer.pos<0)) {
-			// fprintf(stderr, "cons: printed all items\n\n");
-			// break;
-		// }
+		if ((buffer.next == NROF_ITEMS) && (buffer.pos<0)) {
+			fprintf(stderr, "cons: printed all items\n\n");
+			break;
+		}
 
         //      while not condition-for-this-consumer
         //          wait-cv;
@@ -167,7 +169,7 @@ static void * consumer (void * arg)
 		fprintf(stderr, "\n");
 		//decrement the pos since one spot freed-up in the buffer
 		--buffer.pos;
-		fprintf(stderr, "\t\t\t\t\t\t\tcons%lu.%lu: pos is now: %d\n", data->thread_id%10000, PRTTIME, buffer.pos);
+		fprintf(stderr, "\t\t\t\t\t\t\tcons%lu.%lu: decremended pos, curr pos is: %d\n", data->thread_id%10000, PRTTIME, buffer.pos);
         //      possible-cv-signals;
 		fprintf(stderr, "\t\t\t\t\t\t\tcons%lu.%lu: signal send\n", data->thread_id%10000, PRTTIME);
 		pthread_cond_broadcast(&buffer_cond_consumed);
@@ -185,7 +187,11 @@ int main (void)
     // TODO: 
     // * startup the producer threads and the consumer thread
     // * wait until all threads are finished
-	
+
+	//clear the bufer and its cnt
+	memset(&buffer,-1,sizeof(buffer_s)); // -1 signify's init state, yes memset works because -1 = 0xff
+	buffer.next = 0;
+
     thread_data_t* thread_data_prod = calloc(NROF_PRODUCERS,sizeof(thread_data_t));
 	int tp=0;
 	for(int err=0; (tp < NROF_PRODUCERS) && !(err < 0); ++tp) { // exit when NROF_PRODUCERS is reached, also terminate if the last create generated an error.
@@ -206,10 +212,7 @@ int main (void)
 		err = pthread_create(&thread_data_cons[tc].thread_id, NULL, consumer, (void *)&(thread_data_cons[tc]));
 		if (err < 0) perror("consumer");
 	}
-	
-	//clear the bufer and its cnt
-	memset(&buffer,-1,sizeof(buffer_s)); // -1 signify's init state, yes memset works because -1 = 0xff
-	buffer.next = 0;
+
 
 	//start everything by generating a signal;
 	//pthread_cond_signal (&buffer_cond);
