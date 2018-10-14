@@ -17,12 +17,12 @@ typedef int      				ITEM;
  *
  * When editing this file: ensure that NROF_PRODUCERS > 0
  */
-#define NROF_PRODUCERS          83
+#define NROF_PRODUCERS          80
 
 /* NROF_ITEMS
  * number of jobs to be handled by the producers
  */
-#define NROF_ITEMS              83047
+#define NROF_ITEMS              2000
 
 /* BUFFER_SIZE
  * number of items that fit in the buffer
