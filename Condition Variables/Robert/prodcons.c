@@ -26,7 +26,7 @@
 #include "prodcons.h"
 
 
-#define NROF_CONSUMERS          1
+#define NROF_CONSUMERS          3
 
 #define _NO_DEBUGOUT_COND_VARS
 
@@ -36,7 +36,7 @@
 
 #define MAX(x,y)    ((x<y)?y:x)
 
- typedef struct {
+typedef struct {
     pthread_t   thread_id;
     ITEM    item;
 }thread_data_t;
@@ -51,6 +51,7 @@ buffer_s buffer;
 
 static pthread_mutex_t buffer_mutex              = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t       buffer_cond_produced = PTHREAD_COND_INITIALIZER;
+static pthread_cond_t       buffer_cond_new_next = PTHREAD_COND_INITIALIZER;
 static pthread_cond_t       buffer_cond_consumed = PTHREAD_COND_INITIALIZER;
 
 static void rsleep (int t);         // already implemented (see below)
@@ -81,7 +82,13 @@ static void * producer (void * arg)
 
         //      while not condition-for-this-producer
         //          wait-cv;
-        while( !(buffer.pos<BUFFER_SIZE-1) || !(data->item==buffer.next) ) {//de morgan
+		
+        while( !(data->item==buffer.next) ) {
+            fprintf(stderr, "prod%lu.%lu: wait item %d, pos %d, bufval %d\n", data->thread_id%10000, PRTTIME, data->item, buffer.pos, buffer.items[MAX(buffer.pos,0)]);
+            pthread_cond_wait(&buffer_cond_new_next, &buffer_mutex);
+        }
+		
+        while( !(buffer.pos<BUFFER_SIZE-1) ) {
             fprintf(stderr, "prod%lu.%lu: wait item %d, pos %d, bufval %d\n", data->thread_id%10000, PRTTIME, data->item, buffer.pos, buffer.items[MAX(buffer.pos,0)]);
             pthread_cond_wait(&buffer_cond_consumed, &buffer_mutex);
         }
@@ -103,7 +110,7 @@ static void * producer (void * arg)
         fprintf(stderr, "prod%lu.%lu: signal send\n",data->thread_id%10000,  PRTTIME);
 
         //but also inform other producers that something was added to the the buffer so they can check if they can proceed.
-        pthread_cond_broadcast(&buffer_cond_consumed);
+        pthread_cond_broadcast(&buffer_cond_new_next);
 
         //mutex-unlock
         err = pthread_mutex_unlock( &buffer_mutex );//critical section stop
@@ -147,7 +154,9 @@ static void * consumer (void * arg)
 
         if ((buffer.next == NROF_ITEMS) && (buffer.pos<0)) { // buffer.next == NROF_ITEMS is a thread exit condition but only if all items have been printed.
             fprintf(stderr, "\t\t\t\t\t\t\tcons%lu.%lu: printed all items\n\n", data->thread_id%10000, PRTTIME);
-            pthread_cond_broadcast (&buffer_cond_produced); // make sure the other consumers are notified that this thread thinks we're done consuming.
+#if (NROF_CONSUMERS> 1)
+			pthread_cond_broadcast (&buffer_cond_produced); // make sure the other consumers are notified that this thread thinks we're done consuming.
+#endif
             fprintf(stderr, "\t\t\t\t\t\t\tcons%lu.%lu: cons done signal send\n", data->thread_id%10000, PRTTIME);
             //      mutex-unlock;
             err = pthread_mutex_unlock(&buffer_mutex );//critical section stop
@@ -173,7 +182,7 @@ static void * consumer (void * arg)
         //      possible-cv-signals;
         fprintf(stderr, "\t\t\t\t\t\t\tcons%lu.%lu: signal send\n", data->thread_id%10000, PRTTIME);
 
-        pthread_cond_broadcast(&buffer_cond_consumed); // broadcast to all sleeping consumers that something got consumed.
+        pthread_cond_signal(&buffer_cond_consumed); // signal to all sleeping producers that something got consumed.
 
         //      mutex-unlock;
         err = pthread_mutex_unlock(&buffer_mutex );//critical section stop
