@@ -24,28 +24,28 @@
 
 #include "prodcons.h"
 
-static ITEM buffer[BUFFER_SIZE];
+static ITEM buffer[BUFFER_SIZE] = {0};
 
 static void rsleep (int t);			// already implemented (see below)
 static ITEM get_next_item (void);	// already implemented (see below)
 
-pthread_t threadId[NROF_PRODUCERS+1];
+pthread_t threadId[NROF_PRODUCERS+1]; //alocate thead id for all producers + one consumer
 
-int upperBoundUsed = 0;
-int lowerBoundUsed = 0;
-sem_t upperBoundSemaphore;
-sem_t lowerBoundSemaphore;
+int upperBoundUsed = 0; //to keep track of upperbound index in the buffer
+int lowerBoundUsed = 0; //to keep track of lowerbound index in the buffer
+sem_t upperBoundSemaphore; //semaphore to prevent extra items being added when buffer is full
+sem_t lowerBoundSemaphore; //semaphore to prevent extra items being removed when buffer is empty
 
-pthread_mutex_t mutex;
+pthread_mutex_t mutex; //mutex that is used with signal to decide which thread can add values
 pthread_cond_t orderCondition;
 
-ITEM nextItemBuffer = 0;
+ITEM nextItemBuffer = 0; //value that keeps track of next desired item for buffer
 
-int error;
+int error; //error for checking the error value
 
 void initialize()
 {
-	error = sem_init(&upperBoundSemaphore, 0, BUFFER_SIZE);
+	error = sem_init(&upperBoundSemaphore, 0, BUFFER_SIZE); //init all semaphores, with buffer size as start
 	if(error<0)
 	{
 		perror("upperBoundSemaphore init failed");
@@ -59,13 +59,13 @@ void initialize()
 		exit(1);
 	}
 
-	error = pthread_cond_init(&orderCondition,NULL);
+	error = pthread_cond_init(&orderCondition,NULL); //init condition
 	if(error<0)
 	{
 		perror("orderCondition init failed");
 		exit(1);
 	}
-	error = pthread_mutex_init ( &mutex, NULL);
+	error = pthread_mutex_init ( &mutex, NULL);//init mutex
 	if(error<0)
 	{
 		perror("Mutex init failed");
@@ -76,7 +76,7 @@ void initialize()
 
 void destroy()
 {
-	error = sem_destroy(&upperBoundSemaphore);
+	error = sem_destroy(&upperBoundSemaphore);//clean up all semaphores
 	if(error<0)
 	{
 		perror("upperBoundSemaphore destroy failed");
@@ -90,13 +90,13 @@ void destroy()
 		exit(1);
 	}
 
-	error = pthread_cond_destroy(&orderCondition);
+	error = pthread_cond_destroy(&orderCondition); //clean condition
 	if(error<0)
 	{
 		perror("orderCondition destroy failed");
 		exit(1);
 	}
-	error = pthread_mutex_destroy(&mutex);
+	error = pthread_mutex_destroy(&mutex);//clean mutex
 	if(error<0)
 	{
 		perror("Mutex destroy failed");
@@ -108,18 +108,18 @@ void destroy()
 
 void pushToBuffer(ITEM number)
 {
-	error = sem_wait(&upperBoundSemaphore);
+	error = sem_wait(&upperBoundSemaphore);//check if there is room left to add something to buffer
 	if(error<0)
 	{
 		perror("Semaphore wait failed");
 		exit(1);
 	}
 
-	buffer[upperBoundUsed] = number;
+	buffer[upperBoundUsed] = number;//place item in buffer
 
-	upperBoundUsed = (upperBoundUsed+1) % BUFFER_SIZE;
+	upperBoundUsed = (upperBoundUsed+1) % BUFFER_SIZE; //determine new upperbound value to place next item
 
-	error = sem_post(&lowerBoundSemaphore);
+	error = sem_post(&lowerBoundSemaphore);//increase lowerbound so item can be removed
 	if(error<0)
 	{
 		perror("Semaphore post failed");
@@ -129,31 +129,32 @@ void pushToBuffer(ITEM number)
 
 ITEM popFromBuffer()
 {
-	error = sem_wait(&lowerBoundSemaphore);
+	error = sem_wait(&lowerBoundSemaphore);//wait till there is a item to take from buffer
 	if(error<0)
 	{
 		perror("Semaphore wait failed");
 		exit(1);
 	}
 
-	ITEM temp = buffer[lowerBoundUsed];
+	ITEM temp = buffer[lowerBoundUsed]; //take item from lowerbound
 
-	lowerBoundUsed = (lowerBoundUsed+1) % BUFFER_SIZE;
+	lowerBoundUsed = (lowerBoundUsed+1) % BUFFER_SIZE; //determine new lowerbound for next pop
 
-	error = sem_post(&upperBoundSemaphore);
+	error = sem_post(&upperBoundSemaphore);//increase uperbound semaphore to indicate room for new item
 	if(error<0)
 	{
 		perror("Semaphore post failed");
 		exit(1);
 	}
 
-	return temp;
+	return temp; //return taken item
 }
 
 /* producer thread */
 static void * 
 producer()
 {
+	//acquire item untill NROF_ITEMS is reached this is when all items are submitted
     for (ITEM currentItem = get_next_item();currentItem<NROF_ITEMS; currentItem = get_next_item())
     {
         // TODO: 
@@ -174,7 +175,9 @@ producer()
     		pthread_cond_wait(&orderCondition, &mutex);
     	}
     	//      critical-section;
+    	// add item to buffer
    		pushToBuffer(currentItem);
+   		//increase value of desired value
    		nextItemBuffer++;
    		//      possible-cv-signals;
    		pthread_cond_broadcast(&orderCondition);
@@ -191,8 +194,10 @@ producer()
 static void * 
 consumer()
 {
+	//loop untill nrof items are receive
     for (int i = 0;i<NROF_ITEMS;i++)
     {
+    	//pop item and print it
     	printf("%d\n",popFromBuffer());
 		
         rsleep (100);		// simulating all kind of activities...
@@ -202,13 +207,14 @@ consumer()
 
 void createThreads()
 {
+	//create consumer thread
 	error = pthread_create (&threadId[0], NULL, consumer, NULL); //create the thread
 	if(error<0)
 	{
 		perror("Creating thread failed");
 		exit(1);
 	}
-
+	//create all producer threads
 	for(int i = 1;i<NROF_PRODUCERS+1;i++)
 	{
 		error = pthread_create (&threadId[i], NULL, producer, NULL); //create the thread
@@ -222,6 +228,7 @@ void createThreads()
 
 void joinThreads()
 {
+	//wait till all threads have finished
 	for(int i = 0;i<NROF_PRODUCERS+1;i++)
 	{
 		error = pthread_join(threadId[i], NULL);
@@ -235,6 +242,7 @@ void joinThreads()
 
 int main (void)
 {
+	//startup
 	initialize();
 
 	createThreads();
@@ -242,10 +250,14 @@ int main (void)
     // TODO: 
     // * startup the producer threads and the consumer thread
 
+
+	pthread_cond_broadcast(&orderCondition);
+
     // * wait until all threads are finished  
 
 	joinThreads();
 
+	//destroy
 	destroy();
     
     return (0);
