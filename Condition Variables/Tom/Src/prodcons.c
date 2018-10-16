@@ -242,9 +242,6 @@ int main (void)
     // TODO: 
     // * startup the producer threads and the consumer thread
 
-
-	pthread_cond_broadcast(&orderCondition);
-
     // * wait until all threads are finished  
 
 	joinThreads();
