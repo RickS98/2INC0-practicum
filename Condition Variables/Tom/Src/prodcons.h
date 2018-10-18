@@ -29,5 +29,5 @@ typedef int      				ITEM;
  *
  * When editing this file: ensure that BUFFER_SIZE > 1
  */
-#define BUFFER_SIZE             5
+#define BUFFER_SIZE             2
 
