@@ -47,7 +47,7 @@ my_condition_thread (void * arg)
        
     printf ("                    thread: wait...\n");
     pthread_cond_wait (&condition, &mutex);
-    printf ("                    thread: signalled\n");
+    printf ("                    thread: signaled\n");
     
     sleep (2);
     printf ("                    thread: leave CS\n");
